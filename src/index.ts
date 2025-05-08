@@ -18,18 +18,25 @@ app.get("/", (req: Request, res: Response) => {
   res.send("Hello World!");
 });
 
-// Connect to the mongoDb database 
-connectMonogoDbDataBase().then(() => {
-  // After connecting to the mongodb database connect to the redis
-  connectRedis().then(() => {
-    httpServer.listen(port, () => {   // ✅ CHANGED THIS LINE!
-      console.log(`Server is running on port ${port}`);
-    });
-  }).catch((error) => { // Handle error if error occurs while connecting to redis
+// Connect to the mongoDb database
+connectMonogoDbDataBase()
+  .then(() => {
+    // After connecting to the mongodb database connect to the redis
+    connectRedis()
+      .then(() => {
+        httpServer.listen(port, () => {
+          // ✅ CHANGED THIS LINE!
+          console.log(`Server is running on port ${port}`);
+        });
+      })
+      .catch((error) => {
+        // Handle error if error occurs while connecting to redis
+        console.log(`Error: ${error.message}`);
+        process.exit(1);
+      });
+  })
+  .catch((error) => {
+    // Handle error if error occurs while connecting to mongodb
     console.log(`Error: ${error.message}`);
     process.exit(1);
   });
-}).catch((error) => { // Handle error if error occurs while connecting to mongodb
-  console.log(`Error: ${error.message}`);
-  process.exit(1);
-});

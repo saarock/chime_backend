@@ -1,3 +1,3 @@
-import userHelper from "./user.helper.js"
+import userHelper from "./user.helper.js";
 
-export {userHelper}
+export { userHelper };

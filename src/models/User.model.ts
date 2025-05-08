@@ -6,147 +6,142 @@ import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 
-
-
 // Create Scheme
-const userSchema = new Schema({
+const userSchema = new Schema(
+  {
     fullName: {
-        type: String,
-        required: [true, "fullName is requried!"],
+      type: String,
+      required: [true, "fullName is requried!"],
     },
     userName: {
-        type: String,
-        unique: [true, 'UserName already exists'],
-        sparse: true,
-        validate: {
-            validator: function (value: string) {
-                return /^[a-zA-Z0-9]+$/.test(value); // username must contain only letters and numbers
-            },
-            message: 'Username must be alphanumeric'
+      type: String,
+      unique: [true, "UserName already exists"],
+      sparse: true,
+      validate: {
+        validator: function (value: string) {
+          return /^[a-zA-Z0-9]+$/.test(value); // username must contain only letters and numbers
         },
+        message: "Username must be alphanumeric",
+      },
     },
     email: {
-        type: String,
-        required: [true, "Email is Required!"],
-        unique: [true, 'Email already exists'],
-        sparse: true
-
+      type: String,
+      required: [true, "Email is Required!"],
+      unique: [true, "Email already exists"],
+      sparse: true,
     },
     phoneNumber: {
-        type: String,
-        unique: [true, 'phoneNumber already exists'],
-        sparse: true
-
+      type: String,
+      unique: [true, "phoneNumber already exists"],
+      sparse: true,
     },
     profilePicture: {
-        type: String,
+      type: String,
     },
     age: {
-        type: Number,
-        min: [14, "Age must be 18 or above"]
+      type: Number,
+      min: [14, "Age must be 18 or above"],
     },
     gender: {
-        type: String,
-        enum: ["male", "female", "other"],
+      type: String,
+      enum: ["male", "female", "other"],
     },
 
     relationShipStatus: {
-        type: String,
-        enum: ["single", "mingle", "not-interest"],
+      type: String,
+      enum: ["single", "mingle", "not-interest"],
     },
     active: {
-        type: Boolean,
-        default: true,
-        required: [true, "Active is requried!"],
+      type: Boolean,
+      default: true,
+      required: [true, "Active is requried!"],
     },
     password: {
-        type: String,
+      type: String,
     },
     role: {
-        type: String,
-        default: "user",
-        required: [true, "role is reqruied!"],
-        enum: ["user", 'admin']
+      type: String,
+      default: "user",
+      required: [true, "role is reqruied!"],
+      enum: ["user", "admin"],
     },
     refreshToken: {
-        type: String,
-    }
-},
-    {
-        timestamps: true,
+      type: String,
     },
-
+  },
+  {
+    timestamps: true,
+  },
 );
 
 // aggregate Query setup
 userSchema.plugin(mongooseAggregatePaginate);
 
-
 // mongoose pre hooks
 
 // hash the password
 userSchema.pre("save", async function (next) {
-    if (!this.password || !this.isModified("password") || this.password.trim() !== "") return next();
-    this.password = await bcrypt.hash(this.password, 20);
-    next();
+  if (
+    !this.password ||
+    !this.isModified("password") ||
+    this.password.trim() !== ""
+  )
+    return next();
+  this.password = await bcrypt.hash(this.password, 20);
+  next();
 });
 
-// Check the password is correct or not 
+// Check the password is correct or not
 userSchema.methods.isPasswordCorrect = async function (password: string) {
-    return await bcrypt.compare(password, this.password); // return true or false
-}
+  return await bcrypt.compare(password, this.password); // return true or false
+};
 
 // generate the access token and refresh token
 userSchema.methods.generateAccessToken = async function () {
-    const secret: any = process.env.ACCESS_TOKEN_SECRET;
-    const expiry: any = process.env.ACCESS_TOKEN_EXPIRY;
+  const secret: any = process.env.ACCESS_TOKEN_SECRET;
+  const expiry: any = process.env.ACCESS_TOKEN_EXPIRY;
 
-    if (!secret) {
-        throw new Error("ACCESS_TOKEN_SECRET is not defined");
-    }
-    if (!expiry) {
-        throw new Error("ACCESS_TOKEN_EXPIRY is not defined");
-    }
+  if (!secret) {
+    throw new Error("ACCESS_TOKEN_SECRET is not defined");
+  }
+  if (!expiry) {
+    throw new Error("ACCESS_TOKEN_EXPIRY is not defined");
+  }
 
-    return jwt.sign(
-        {
-            _id: this._id,
-            email: this.email,
-            userName: this.userName
-        },
-        secret,
-        {
-            expiresIn: expiry
-        }
-    );
+  return jwt.sign(
+    {
+      _id: this._id,
+      email: this.email,
+      userName: this.userName,
+    },
+    secret,
+    {
+      expiresIn: expiry,
+    },
+  );
 };
 
-
-
-
-
 userSchema.methods.generateRefreshToken = async function () {
-    const secret: any = process.env.REFRESH_TOKEN_SECRET;
-    const expiry: any = process.env.REFRESH_TOKEN_EXPIRY;
+  const secret: any = process.env.REFRESH_TOKEN_SECRET;
+  const expiry: any = process.env.REFRESH_TOKEN_EXPIRY;
 
-    if (!secret) {
-        throw new Error("REFRESH_TOKEN_SECRET is not defined");
-    }
-    if (!expiry) {
-        throw new Error("REFRESH_TOKEN_EXPIRY is not defined");
-    }
+  if (!secret) {
+    throw new Error("REFRESH_TOKEN_SECRET is not defined");
+  }
+  if (!expiry) {
+    throw new Error("REFRESH_TOKEN_EXPIRY is not defined");
+  }
 
-    return jwt.sign(
-        {
-            _id: this._id,
-        },
-        secret,
-        {
-            expiresIn: expiry
-        }
-    );
-}
-
+  return jwt.sign(
+    {
+      _id: this._id,
+    },
+    secret,
+    {
+      expiresIn: expiry,
+    },
+  );
+};
 
 // The model
 const User = mongoose.model("User", userSchema);

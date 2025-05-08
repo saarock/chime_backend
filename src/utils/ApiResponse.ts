@@ -2,37 +2,33 @@
  * Global API response
  */
 class ApiResponse {
-    statusCode: number;
-    data: any;
-    message: string;
-    success: boolean;
+  statusCode: number;
+  data: any;
+  message: string;
+  success: boolean;
 
-    constructor(
-        statusCode: number,
-        data: any,
-        message: string
-    ) {
-        this.statusCode = statusCode;
-        this.data = data;
-        this.message = message;
-        this.success = statusCode < 400;  // Optional: track if it's a success response
-    }
+  constructor(statusCode: number, data: any, message: string) {
+    this.statusCode = statusCode;
+    this.data = data;
+    this.message = message;
+    this.success = statusCode < 400; // Optional: track if it's a success response
+  }
 
-    getStatusCode() {
-        return this.statusCode;
-    }
+  getStatusCode() {
+    return this.statusCode;
+  }
 
-    getData() {
-        return this.data;
-    }
+  getData() {
+    return this.data;
+  }
 
-    getMessage() {
-        return this.message;
-    }
+  getMessage() {
+    return this.message;
+  }
 
-    isSuccess() {
-        return this.success;
-    }
+  isSuccess() {
+    return this.success;
+  }
 }
 
 // Import
