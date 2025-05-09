@@ -1,9 +1,5 @@
 // Import all the necessary dependencies here
-import {
-  type Request,
-  type Response,
-  type NextFunction,
-} from "express";
+import { type Request, type Response, type NextFunction } from "express";
 import ApiError from "./ApiError.js";
 
 /**
@@ -12,27 +8,29 @@ import ApiError from "./ApiError.js";
  */
 const asyncHandler =
   (fn: (req: Request, res: Response, next: NextFunction) => Promise<any>) =>
-    async (req: Request, res: Response, next: NextFunction) => {
-      try {
-        return await fn(req, res, next);
-      } catch (error: any) {
-        res
-          .status(
-            error.statusCode
-              ? error.statusCode >= 400
-                ? error.statusCode
-                : 500
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      return await fn(req, res, next);
+    } catch (error: any) {
+      res
+        .status(
+          error.statusCode
+            ? error.statusCode >= 400
+              ? error.statusCode
+              : 500
+            : 500,
+        )
+        .json(
+          new ApiError(
+            error.statusCode && error.statusCode >= 400
+              ? error.statusCode
               : 500,
-          )
-          .json(
-            new ApiError(
-              error.statusCode && error.statusCode >= 400 ? error.statusCode : 500,
-              error?.message ?? "Something is wrong",
-              [],
-              error instanceof Error ? error.stack : "",
-            ),
-          );
-      }
-    };
+            error?.message ?? "Something is wrong",
+            [],
+            error instanceof Error ? error.stack : "",
+          ),
+        );
+    }
+  };
 
 export default asyncHandler;

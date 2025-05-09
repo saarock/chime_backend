@@ -2,7 +2,7 @@ import { Server, Socket } from "socket.io";
 import { createAdapter } from "@socket.io/redis-adapter";
 import { setupChatSocket } from "./chatSocket.js";
 import { setupVideoCallSocket } from "./videoCallSocket.js";
-import { client } from "../config/index.js";
+import { client } from "../configs/index.js";
 
 export const initSockets = (httpServer: any) => {
   const io = new Server(httpServer, {

@@ -18,19 +18,14 @@ class UserService {
   }
 
   // Main method for login with Google
-  async loginWithGoogle(
-    googleTokens: UserLoginWithGoogleDetils,
-  ): Promise<{
+  async loginWithGoogle(googleTokens: UserLoginWithGoogleDetils): Promise<{
     userData: userTypes;
     refreshToken: string;
     accessToken: string;
   }> {
-
-
     // Step 1: Verify Google token and retrieve user data
     const userGoogleDatas: TokenPayload | undefined =
       await verifyGoogleToken(googleTokens);
-
 
     if (!userGoogleDatas) {
       throw new ApiError(404, "Google Payload Not Found");
@@ -44,17 +39,12 @@ class UserService {
       throw new ApiError(404, "fulName is required");
     }
 
-
-
     // Step 2: Check if the user is already registered
     const alreadySavedUser = await User.findOne({
       email: userGoogleDatas.email,
     })
       .select("-password -refreshToken")
       .lean<userTypes>();
-
-
-
 
     if (alreadySavedUser) {
       // If user already exists, generate access and refresh tokens and cache the  userDetails [Login User]
@@ -73,12 +63,10 @@ class UserService {
       profilePicture: userGoogleDatas.picture,
     });
 
-
     // Step 4: Select user data excluding sensitive information (like password)
     const userWithoutSensitiveData = await User.findById(justCreatedUser._id)
       .select("-password -refreshToken")
       .lean<userTypes>();
-
 
     // Throw the error if the user is found with id;
     if (!userWithoutSensitiveData) {
@@ -108,6 +96,7 @@ class UserService {
       userData = isThereisUserData;
     } else {
       // If user data is not in the cache
+
       userData = await User.findById(decoded._id)
         .select("-password -refreshToken")
         .lean<userTypes>();
@@ -139,9 +128,14 @@ class UserService {
     if (!userId) {
       throw new ApiError(400, "User id requried while refreshing the tokens");
     }
+
     const currentUser = await User.findById(userId).select("-password");
     if (!currentUser) {
       throw new ApiError(404, "User not found");
+    }
+
+    if (!currentUser.refreshToken || currentUser.refreshToken.trim() === "") {
+      throw new ApiError(404, "RefreshToken not found user is already logout");
     }
 
     // compare database refreshToken and client token

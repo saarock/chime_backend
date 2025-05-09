@@ -4,8 +4,11 @@ import { userHelper } from "../helpers/index.js";
 import { ApiError, asyncHandler } from "../utils/index.js";
 
 export const verifyJWTRefreshToken = asyncHandler(
-  async (req: Request, res: Response, next: NextFunction) => {
+  async (req: Request, _: Response, next: NextFunction) => {
+    console.log("***************************************************");
+
     const { refreshToken } = req.body;
+    console.log(refreshToken);
 
     if (
       refreshToken === undefined ||
@@ -24,6 +27,7 @@ export const verifyJWTRefreshToken = asyncHandler(
     // set the values to the keys
     const userId = payload._id;
     req.userId = userId;
+
     next();
   },
 );

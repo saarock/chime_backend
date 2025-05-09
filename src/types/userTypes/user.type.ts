@@ -11,15 +11,16 @@ export interface User {
   email: string;
   phoneNumber: string;
   profilePicture?: string;
-  age?: string;
-  gender?: ["male", "female", "other"];
+  age: string;
+  gender: ["male", "female", "other"];
   relationShipStatus?: ["single", "mingle", "not-interest"];
   active: boolean;
-  country?: string;
+  country: string;
   role: "admin" | "user";
   __v: number;
   createdAt: string;
   updatedAt: string;
+  refreshToken: string;
 }
 
 // User LoginWithGoogleType for google login
