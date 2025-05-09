@@ -30,7 +30,7 @@ class UserHelper {
     const user = await User.findById(userId);
     if (!user) {
       throw new ApiError(404, "User not found");
-    }
+    } 
 
     // Generate the accessToken
     const accessToken = await user.generateAccessToken();
@@ -52,7 +52,7 @@ class UserHelper {
   };
 
   // Get the cache data by userId
-  getUserRedisCacheData = async (userId: string): Promise<userTypes | null> => {
+  getUserRedisCacheData = async (userId: string): Promise<userTypes | null> => {    
     const userCacheData = await client.get(userId);
     if (userCacheData && JSON.parse(userCacheData)) {
       return JSON.parse(userCacheData);
@@ -61,10 +61,9 @@ class UserHelper {
   }
 
   // Verify refreshToken
-  verifyRefreshToken(refreshToken: string): JwtPayload {
+  verifyRefreshToken(refreshToken: string ): JwtPayload {   
     const jwtSecret = process.env.REFRESH_TOKEN_SECRET;
-    // Just check the jwtSecret because refreshToken is already checking in the middleware
-    if (!jwtSecret || !jwtSecret?.trim()) {
+    if (!refreshToken || !jwtSecret || !jwtSecret?.trim() || !refreshToken?.trim()) {
       throw new ApiError(
         400,
         "Secret key not found",
