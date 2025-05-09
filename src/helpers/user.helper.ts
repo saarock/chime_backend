@@ -1,17 +1,25 @@
 // Imports
-import { client } from "../config/index.js";
+import { client } from "../configs/index.js";
 import { User } from "../models/index.js";
 import type { User as userTypes } from "../types/index.js";
 import { ApiError } from "../utils/index.js";
 import jwt, { type JwtPayload } from "jsonwebtoken";
 
+
 class UserHelper {
-  async cacheTheUserDataById(key: string, value: string) {
-    // Cache the user data in Redis (excluding sensitive data)
-    await client.set(key, value, {
-      EX: 3600,
-      NX: true,
-    }); // Cache expires in 1 hour (3600 seconds)
+  cacheTheUserDataById = async (key: string, value: string) => {
+    try {
+      console.log("Setting data in Redis:", key, value);  // Check if Redis `set` is being called
+      // Cache the user data in Redis (excluding sensitive data)
+      await client.set(key, value, {
+        EX: 3600,
+        NX: true,
+      }); // Cache expires in 1 hour (3600 seconds)
+    } catch (error) {
+      console.error(`Error caching user data: ${error}`);
+      // I want to send the userfriendly error here that's why i use try catch to catch the error and send the userfriendly error
+      throw new ApiError(500, "Failed to cache the user Data at in-memory-database");
+    }
   }
 
   // Helper method to generate access and refresh tokens
@@ -24,9 +32,11 @@ class UserHelper {
       throw new ApiError(404, "User not found");
     }
 
+    // Generate the accessToken
     const accessToken = await user.generateAccessToken();
-
+    // Generate the refreshToken
     const refreshToken = await user.generateRefreshToken();
+    // Update the refreshToken in the database
     user.refreshToken = refreshToken;
 
     // Save the refresh token to the database without validating before saving (if you don't want validation to be triggered)
@@ -37,11 +47,12 @@ class UserHelper {
       userIdAString,
       JSON.stringify(userDataWithoutSensitiveData),
     );
+    // Return the access and refresh token ;
     return { accessToken, refreshToken };
   };
 
   // Get the cache data by userId
-  async getUserRedisCacheData(userId: string): Promise<userTypes | null> {
+  getUserRedisCacheData = async (userId: string): Promise<userTypes | null> => {
     const userCacheData = await client.get(userId);
     if (userCacheData && JSON.parse(userCacheData)) {
       return JSON.parse(userCacheData);
@@ -52,12 +63,12 @@ class UserHelper {
   // Verify refreshToken
   verifyRefreshToken(refreshToken: string): JwtPayload {
     const jwtSecret = process.env.REFRESH_TOKEN_SECRET;
-    if (!jwtSecret?.trim() || !refreshToken?.trim()) {
-      console.log("hahahha");
+    // Just check the jwtSecret because refreshToken is already checking in the middleware
+    if (!jwtSecret || !jwtSecret?.trim()) {
       throw new ApiError(
         400,
-        "RefreshToken or Secret key not found",
-        ["Token NotFound", "Server Error"],
+        "Secret key not found",
+        ["Key NotFound", "Server Error"],
         "At auth.middleware.js file line number 20 to 21",
       );
     }

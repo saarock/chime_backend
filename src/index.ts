@@ -1,5 +1,5 @@
 // Import all the necessary dependencies
-import { connectMonogoDbDataBase, connectRedis } from "./config/index.js";
+import { connectMonogoDbDataBase, connectRedis } from "./configs/index.js";
 import app from "./app.js";
 import { createServer } from "http";
 import { type Request, type Response } from "express";

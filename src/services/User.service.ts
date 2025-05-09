@@ -48,7 +48,7 @@ class UserService {
       .lean<userTypes>();
 
     if (alreadySavedUser) {
-      // If user already exists, generate access and refresh tokens and cache the  userDetails
+      // If user already exists, generate access and refresh tokens and cache the  userDetails [Login User]
       const { accessToken, refreshToken } =
         await this.#userHelper.generateAccessAndRefreshTokensAndCacheTheUserDataInRedis(
           alreadySavedUser._id,
@@ -57,7 +57,7 @@ class UserService {
       return { userData: alreadySavedUser, accessToken, refreshToken };
     }
 
-    // Step 3: If user doesn't exist, create a new user in the database
+    // Step 3: If user doesn't exist, create a new user in the database [Register User]
     const justCreatedUser = await User.create({
       fullName: userGoogleDatas.name,
       email: userGoogleDatas.email,
