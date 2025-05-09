@@ -25,9 +25,13 @@ class UserService {
     refreshToken: string;
     accessToken: string;
   }> {
+
+
     // Step 1: Verify Google token and retrieve user data
     const userGoogleDatas: TokenPayload | undefined =
       await verifyGoogleToken(googleTokens);
+
+
     if (!userGoogleDatas) {
       throw new ApiError(404, "Google Payload Not Found");
     }
@@ -40,12 +44,17 @@ class UserService {
       throw new ApiError(404, "fulName is required");
     }
 
+
+
     // Step 2: Check if the user is already registered
     const alreadySavedUser = await User.findOne({
       email: userGoogleDatas.email,
     })
       .select("-password -refreshToken")
       .lean<userTypes>();
+
+
+
 
     if (alreadySavedUser) {
       // If user already exists, generate access and refresh tokens and cache the  userDetails [Login User]
@@ -64,22 +73,24 @@ class UserService {
       profilePicture: userGoogleDatas.picture,
     });
 
+
     // Step 4: Select user data excluding sensitive information (like password)
     const userWithoutSensitiveData = await User.findById(justCreatedUser._id)
       .select("-password -refreshToken")
       .lean<userTypes>();
+
+
     // Throw the error if the user is found with id;
-    if (!userWithoutSensitiveData)
+    if (!userWithoutSensitiveData) {
       throw new ApiError(400, "UserDetails not found by ID");
-    console.log("This is the userGoogleDatas: ", userGoogleDatas);
+    }
+
     // Step 5: Generate access and refresh tokens for the new user and cachne the userDetails
     const { accessToken, refreshToken } =
       await this.#userHelper.generateAccessAndRefreshTokensAndCacheTheUserDataInRedis(
         justCreatedUser._id,
         userWithoutSensitiveData,
       );
-
-    console.log("User registered successfully");
 
     // Return user data and tokens
     return { userData: userWithoutSensitiveData, accessToken, refreshToken };
@@ -135,8 +146,6 @@ class UserService {
 
     // compare database refreshToken and client token
     if (currentUser.refreshToken === refreshTokenFromClient) {
-      console.log("Token valid");
-
       const userRedisCacheData =
         await this.#userHelper.getUserRedisCacheData(userId);
 

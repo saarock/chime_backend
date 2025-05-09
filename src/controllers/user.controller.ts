@@ -4,14 +4,18 @@ import type { TokenPayloadTypes } from "types/index.js";
 import { userService } from "../services/index.js";
 import { ApiResponse, asyncHandler } from "../utils/index.js";
 
+
 // Login from google controller
 export const loginFromTheGoogle = asyncHandler(async (req, res) => {
-  const { credentials, clientId } = req.body;
+
+  const { credentials, clientId } = req.body;    
   const { userData, refreshToken, accessToken } =
     await userService.loginWithGoogle({
       credentials: credentials,
       clientId: clientId,
     });
+    
+    
   return res
     .status(200)
     .json(
