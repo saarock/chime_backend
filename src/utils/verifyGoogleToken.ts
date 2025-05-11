@@ -1,6 +1,5 @@
 import { OAuth2Client, type TokenPayload } from "google-auth-library";
 import type { UserLoginWithGoogleDetils } from "../types/index.js";
-import ApiError from "./ApiError.js";
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const verifyGoogleToken = async (
@@ -8,7 +7,7 @@ const verifyGoogleToken = async (
 ): Promise<TokenPayload | undefined> => {
   const ticket = await client.verifyIdToken({
     idToken: googleTokens.credentials,
-    audience: process.env.GOOGLE_CLIENT_ID || googleTokens.clientId,
+    audience: googleTokens.clientId,
   });
 
   const payload = ticket.getPayload();

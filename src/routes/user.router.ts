@@ -6,6 +6,7 @@ import {
   verifyUser,
 } from "../controllers/index.js";
 import { Router } from "express";
+import { logOutUser } from "../controllers/user.controller.js";
 
 const userRouter = Router();
 
@@ -19,5 +20,6 @@ userRouter.post(
   verifyJWTRefreshToken,
   generateAnotherAccessAndRefreshToken,
 );
-
+// Logout user
+userRouter.post("/logout-user", verifyJWT, logOutUser)
 export default userRouter;
