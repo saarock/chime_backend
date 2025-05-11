@@ -38,6 +38,11 @@ class UserHelper {
     const accessToken = await user.generateAccessToken();
     // Generate the refreshToken
     const refreshToken = await user.generateRefreshToken();
+
+    if (!accessToken || !refreshToken) {
+      // if access or refresh token doesn't generated then throw new erro with status code 500
+      throw new ApiError(500, "Internal Server Error");
+    }
     // Update the refreshToken in the database
     user.refreshToken = refreshToken;
 

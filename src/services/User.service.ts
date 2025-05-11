@@ -51,7 +51,6 @@ class UserService {
         // throw error if the user is blocked or not active
         throw new ApiError(403, "You are blocked because of irrelevant activities pleased contact us.");
       }
-      console.log(alreadySavedUser);
 
       // If user already exists, generate access and refresh tokens and cache the  userDetails [Login User]
       const { accessToken, refreshToken } =

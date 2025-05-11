@@ -47,7 +47,7 @@ describe("verifyGoogleToken", () => {
 
     const result = await verifyGoogleToken({
       credentials: "fake-token",
-      clientId: "test-client-id",
+      clientId: "env-client-id",
     });
 
     expect(result).toEqual(fakePayload);
