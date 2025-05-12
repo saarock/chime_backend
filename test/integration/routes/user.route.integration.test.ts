@@ -131,3 +131,50 @@ describe("POST /refresh-tokens", () => {
     expect(response.body.statusCode).toBe(404);
   });
 });
+
+describe('POST /logout-user', () => {
+  test("should response with 200 status code", async () => {
+    const user = {
+      _id: "123",
+      email: "test@example.com",
+      refreshToken: "fake-refresh-token",
+      set: vi.fn().mockReturnThis(),
+      save: vi.fn().mockResolvedValue(true)
+    };
+
+    await (User.findById as any).mockResolvedValue(user);
+    const response = await request(app)
+      .post("/api/v1/users/logout-user")
+      .send({ userId: "123" });
+    expect(response.body.statusCode).toBe(200);
+
+  });
+
+  test("should response with 404 userId doesnot found if there is not userId", async () => {
+    const user = {
+      _id: "123",
+      email: "test@example.com",
+      refreshToken: "fake-refresh-token",
+      set: vi.fn().mockReturnThis(),
+      save: vi.fn().mockResolvedValue(true)
+    };
+
+    await (User.findById as any).mockResolvedValue(user);
+    const response = await request(app)
+      .post("/api/v1/users/logout-user")
+      .send({ userId: "" });
+    expect(response.body.statusCode).toBe(404);
+  });
+
+  test("should response with 404 user doesnot found with given userId", async () => {
+    const user = undefined;
+
+    await (User.findById as any).mockResolvedValue(user);
+    const response = await request(app)
+      .post("/api/v1/users/logout-user")
+      .send({ userId: "123" });
+    expect(response.body.statusCode).toBe(404);
+  });
+
+});
+

@@ -47,6 +47,11 @@ class UserService {
       .lean<userTypes>();
 
     if (alreadySavedUser) {
+      if (!alreadySavedUser.active) {
+        // throw error if the user is blocked or not active
+        throw new ApiError(403, "You are blocked because of irrelevant activities pleased contact us.");
+      }
+
       // If user already exists, generate access and refresh tokens and cache the  userDetails [Login User]
       const { accessToken, refreshToken } =
         await this.#userHelper.generateAccessAndRefreshTokensAndCacheTheUserDataInRedis(
@@ -174,6 +179,37 @@ class UserService {
         403,
         "You do not have permission for the requested action",
       );
+    }
+  }
+
+
+  /**
+   * Logs out the user by clearing their refresh token.
+   * @param userId - The ID of the user to log out.
+   */
+  async logoutUser(userId: string): Promise<void> {
+    if (!userId || userId.trim() === "") {
+      console.error("No userId found");
+      
+      throw new ApiError(
+        404,
+        "userId doesnot found"
+
+      );
+    }
+    const user = await User.findById(userId);
+
+    if (!user) {
+      console.error("No user found with given user id");
+      
+      throw new ApiError(404, "User not found");
+    }
+    // Optional: Check if refreshToken exists before clearing
+    if (user.refreshToken) {
+      user.set("refreshToken", undefined, { strict: false });
+      await user.save({ validateBeforeSave: false });
+    } else {
+      throw new ApiError(400, "User is already logged out")
     }
   }
 }
