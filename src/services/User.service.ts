@@ -188,9 +188,20 @@ class UserService {
    * @param userId - The ID of the user to log out.
    */
   async logoutUser(userId: string): Promise<void> {
+    if (!userId || userId.trim() === "") {
+      console.error("No userId found");
+      
+      throw new ApiError(
+        404,
+        "userId doesnot found"
+
+      );
+    }
     const user = await User.findById(userId);
-    
+
     if (!user) {
+      console.error("No user found with given user id");
+      
       throw new ApiError(404, "User not found");
     }
     // Optional: Check if refreshToken exists before clearing
