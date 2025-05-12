@@ -40,7 +40,7 @@ export const generateAnotherAccessAndRefreshToken = asyncHandler(
     const clientToken = req.body;
     const userId = req.userId;
 
-    const { refreshToken, accessToken, userData } =
+    const { refreshToken, accessToken } =
       await userService.generateAnotherRefreshTokenAndAccessTokenAndChangeTheDatabaseRefreshToken(
         userId,
         clientToken.refreshToken,
@@ -50,7 +50,7 @@ export const generateAnotherAccessAndRefreshToken = asyncHandler(
       .json(
         new ApiResponse(
           200,
-          { refreshToken, accessToken, userData },
+          { refreshToken, accessToken },
           "Token refreshed successfully",
         ),
       );

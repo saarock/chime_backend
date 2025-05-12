@@ -99,7 +99,6 @@ class UserService {
 
     let userData;
     if (isThereisUserData) {
-      console.log("User data is in the cache");
       // If user data is in the cache
       userData = isThereisUserData;
     } else {
@@ -129,7 +128,6 @@ class UserService {
     userId: string | undefined,
     refreshTokenFromClient: string,
   ): Promise<{
-    userData: userTypes;
     refreshToken: string;
     accessToken: string;
   }> {
@@ -154,11 +152,9 @@ class UserService {
       let userDataWithoutSensativeData;
 
       if (userRedisCacheData) {
-        console.log("User is already in the cache in refreshToken section");
         // If the data is already in the cahche
         userDataWithoutSensativeData = userRedisCacheData;
       } else {
-        console.log("User is not already in the cache in refreshToken section");
         // If the data is not in the cache
         userDataWithoutSensativeData = await User.findById(currentUser)
           .select("-password -refreshToken")
@@ -174,10 +170,8 @@ class UserService {
       return {
         refreshToken,
         accessToken,
-        userData: userDataWithoutSensativeData,
       };
     } else {
-      console.log("Token Invalid");
       throw new ApiError(
         403,
         "You do not have permission for the requested action",

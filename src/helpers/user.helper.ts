@@ -9,7 +9,6 @@ class UserHelper {
   // this cache helper method is just for the authentication and authorization user data cache other core cache are in the cache folder
   cacheTheUserDataById = async (key: string, value: string) => {
     try {
-      console.log("Setting data in Redis:", key, value); // Check if Redis `set` is being called
       // Cache the user data in Redis (excluding sensitive data)
       await client.set(key, value, {
         EX: 3600,
