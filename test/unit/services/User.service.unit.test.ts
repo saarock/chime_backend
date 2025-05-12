@@ -187,14 +187,12 @@ describe("UserService - loginWithGoogle", () => {
     });
   });
 
-
   it("should return null if with given id the data doesnot match", async () => {
     (userHelper.getUserRedisCacheData as any) = vi.fn().mockResolvedValue(null);
 
     const result = await userHelper.getUserRedisCacheData("4569");
     expect(result).toBeNull();
   });
-  
 
   it("should logout user and delete the refresh token from the database", async () => {
     const user = {
@@ -202,15 +200,14 @@ describe("UserService - loginWithGoogle", () => {
       email: "test@example.com",
       refreshToken: "fake-refresh-token",
       set: vi.fn().mockReturnThis(),
-      save: vi.fn().mockResolvedValue(true)
+      save: vi.fn().mockResolvedValue(true),
     };
 
     await (User.findById as any).mockResolvedValue(user);
     await userService.logoutUser("123");
-    expect(user.set).toHaveBeenCalledWith("refreshToken", undefined, {strict: false});
+    expect(user.set).toHaveBeenCalledWith("refreshToken", undefined, {
+      strict: false,
+    });
     expect(user.save).toHaveBeenCalled();
-
-
   });
-
 });

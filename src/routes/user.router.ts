@@ -21,5 +21,5 @@ userRouter.post(
   generateAnotherAccessAndRefreshToken,
 );
 // Logout user
-userRouter.post("/logout-user", verifyJWT, logOutUser)
+userRouter.post("/logout-user", verifyJWT, logOutUser);
 export default userRouter;

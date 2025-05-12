@@ -8,8 +8,7 @@ export const loginFromTheGoogle = asyncHandler(async (req, res, _) => {
   const { credentials, clientId } = req.body;
   console.log(credentials);
   console.log(clientId);
-  
-  
+
   const { userData, refreshToken, accessToken } =
     await userService.loginWithGoogle({
       credentials: credentials,
@@ -58,18 +57,11 @@ export const generateAnotherAccessAndRefreshToken = asyncHandler(
   },
 );
 
-
 // Logout user
-export const logOutUser = asyncHandler( 
-  async (req,res, _) => {
-    const {userId} = req.body;
-    await userService.logoutUser(userId);
-    return res.status(200).json(
-      new ApiResponse(
-        200,
-        null,
-        "User Logged Out successfully."
-      )
-    )
-  }
-)
+export const logOutUser = asyncHandler(async (req, res, _) => {
+  const { userId } = req.body;
+  await userService.logoutUser(userId);
+  return res
+    .status(200)
+    .json(new ApiResponse(200, null, "User Logged Out successfully."));
+});

@@ -68,7 +68,7 @@ class UserHelper {
     return null;
   };
 
-  // Verify refreshToken which is used by the middleware 
+  // Verify refreshToken which is used by the middleware
   verifyRefreshToken(refreshToken: string): JwtPayload {
     const jwtSecret = process.env.REFRESH_TOKEN_SECRET;
     if (
