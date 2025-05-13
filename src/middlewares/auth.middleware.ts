@@ -26,6 +26,7 @@ export const verifyJWT = asyncHandler(
         "Unauthorized request",
         ["Unauthorized request"],
         "At auth.middleware.js file line number 20 to 21",
+        "token_expired",
       );
     }
 
@@ -33,12 +34,13 @@ export const verifyJWT = asyncHandler(
 
     try {
       decoded = jwt.verify(token, jwtScret);
-    } catch (err) {
+    } catch (err) {     
       throw new ApiError(
         401,
         "Invalid or expired token",
         ["Invalid or expired token"],
-        "At auth.middleware.js file line number 34 to 41",
+        "At auth.middleware.js file line number 34 to 43",
+        "token_expired",
       );
     }
 

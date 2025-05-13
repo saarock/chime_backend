@@ -86,13 +86,25 @@ class UserHelper {
 
     try {
       const decoded = jwt.verify(refreshToken, jwtSecret) as JwtPayload;
+      if (!decoded) {
+        console.log("refreshToken expired***((**");
+        
+      }
       return decoded;
     } catch (error) {
       /** If the token is inValid then throw the Error yourself
        * @note Even If you don't use here try catch and throw the error youself then also jwt.verify throw error
        * if the token is invalid which is eventually handled by asynHandler automatically
        */
-      throw new ApiError(401, "Refresh Token invalid or expired");
+        console.log("refreshToken expired***((** FROM ERROR");
+
+      throw new ApiError(
+        401,
+        "Unauthorized request",
+        ["Unauthorized request"],
+        "At user.helper.js file line number 100",
+        "token_expired",
+      );
     }
   }
 }

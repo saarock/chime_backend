@@ -5,8 +5,6 @@ import { ApiError, asyncHandler } from "../utils/index.js";
 
 export const verifyJWTRefreshToken = asyncHandler(
   async (req: Request, _: Response, next: NextFunction) => {
-    console.log("***************************************************");
-
     const { refreshToken } = req.body;
     console.log(refreshToken);
 
@@ -23,7 +21,7 @@ export const verifyJWTRefreshToken = asyncHandler(
     if (typeof payload === "string") {
       throw new ApiError(500, "Server Error");
     }
-
+    
     // set the values to the keys
     const userId = payload._id;
     req.userId = userId;

@@ -5,19 +5,23 @@ class ApiError extends Error {
   success: boolean;
   errors: string[];
   stack: string;
+  errorCode: string;
 
   constructor(
     statusCode: number,
     message: string,
     errors?: string[],
     stack?: string,
+    errorCode?: string,
   ) {
+   
     super(message);
     this.statusCode = statusCode;
     this.message = message;
     this.data = null;
     this.success = false;
-    this.errors = errors ? errors : [];
+    this.errorCode = errorCode ? errorCode : ""
+    this.errors = errors && errors?.length > 0 ? errors : [];
     this.stack = stack || new Error().stack || "";
   }
 }

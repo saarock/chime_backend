@@ -12,6 +12,12 @@ const asyncHandler =
     try {
       return await fn(req, res, next);
     } catch (error: any) {
+      console.log("I am sending error");
+      console.log(error.statusCode);
+      console.log(error.errorCode);
+      
+      
+      
       res
         .status(
           error.statusCode
@@ -28,6 +34,7 @@ const asyncHandler =
             error?.message ?? "Something is wrong",
             [],
             error instanceof Error ? error.stack : "",
+            error?.errorCode ?? "Something went wrong",
           ),
         );
     }
