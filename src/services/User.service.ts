@@ -148,7 +148,7 @@ class UserService {
 
     // compare database refreshToken and client token
     if (currentUser.refreshToken === refreshTokenFromClient) {
-      console.log("token verifyed");
+   
       
       const userRedisCacheData =
         await this.#userHelper.getUserRedisCacheData(userId);
@@ -176,8 +176,6 @@ class UserService {
         accessToken,
       };
     } else {
-      console.log("Error");
-      
       throw new ApiError(
         403,
         "You do not have permission for the requested action",

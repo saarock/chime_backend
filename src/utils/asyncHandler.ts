@@ -12,11 +12,7 @@ const asyncHandler =
     try {
       return await fn(req, res, next);
     } catch (error: any) {
-      console.log("I am sending error");
-      console.log(error.statusCode);
-      console.log(error.errorCode);
-      
-      
+    
       
       res
         .status(

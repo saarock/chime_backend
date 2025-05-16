@@ -3,13 +3,14 @@ import { connectMonogoDbDataBase, connectRedis } from "./configs/index.js";
 import app from "./app.js";
 import { createServer } from "http";
 import { type Request, type Response } from "express";
+import { initSockets } from "./socket/index.js";
 
 const port = process.env.PORT || 3000;
 
 // Import the socket to initialize
 const httpServer = createServer(app);
 
-import { initSockets } from "./socket/index.js";
+
 
 // initialize socket.io
 initSockets(httpServer);

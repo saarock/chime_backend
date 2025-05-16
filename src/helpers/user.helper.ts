@@ -67,46 +67,8 @@ class UserHelper {
     return null;
   };
 
-  // Verify refreshToken which is used by the middleware
-  verifyRefreshToken(refreshToken: string): JwtPayload {
-    const jwtSecret = process.env.REFRESH_TOKEN_SECRET;
-    if (
-      !refreshToken ||
-      !jwtSecret ||
-      !jwtSecret?.trim() ||
-      !refreshToken?.trim()
-    ) {
-      throw new ApiError(
-        400,
-        "Secret key not found",
-        ["Key NotFound", "Server Error"],
-        "At auth.middleware.js file line number 20 to 21",
-      );
-    }
 
-    try {
-      const decoded = jwt.verify(refreshToken, jwtSecret) as JwtPayload;
-      if (!decoded) {
-        console.log("refreshToken expired***((**");
-        
-      }
-      return decoded;
-    } catch (error) {
-      /** If the token is inValid then throw the Error yourself
-       * @note Even If you don't use here try catch and throw the error youself then also jwt.verify throw error
-       * if the token is invalid which is eventually handled by asynHandler automatically
-       */
-        console.log("refreshToken expired***((** FROM ERROR");
 
-      throw new ApiError(
-        401,
-        "Unauthorized request",
-        ["Unauthorized request"],
-        "At user.helper.js file line number 100",
-        "token_expired",
-      );
-    }
-  }
 }
 
 const userHelper = new UserHelper();
