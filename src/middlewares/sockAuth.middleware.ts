@@ -9,7 +9,6 @@ export const socketAuthMiddleware = (
     next: (err?: ExtendedError) => void
 ) => {
     const token = socket.handshake.auth?.accessToken;
-
     if (!token) {
         return next(new Error("Authentication token missing"));
     }
@@ -20,13 +19,11 @@ export const socketAuthMiddleware = (
     }
 
     try {
-        const decoded = jwt.verify(token, ACCESS_TOKEN_SECRET) as jwt.JwtPayload;
-        socket.data.user = decoded; // attach user data to socket
+        const decoded = jwt.verify(token, ACCESS_TOKEN_SECRET) as jwt.JwtPayload;        
+        socket.data.user = decoded;
         next();
     } catch (err: any) {
         if (err instanceof TokenExpiredError) {
-            console.log("this is the best");
-            
             return next(new Error("AUTH_EXPIRED"));
         } else if (err instanceof JsonWebTokenError) {
             return next(new Error("AUTH_INVALID"));

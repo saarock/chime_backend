@@ -1,12 +1,17 @@
 // Import all the necessary dependencies here
-import express from "express";
-import cors from "cors";
 import dotenv from "dotenv";
 
 // config the dotenv
 dotenv.config();
 
+import express from "express";
+import cors from "cors";
+
+
+
 const app = express();
+
+
 
 // app configuration
 app.use(
@@ -15,6 +20,7 @@ app.use(
     credentials: true,
   }),
 );
+
 // To accept the JSON From the server
 app.use(express.json());
 // URL configuration

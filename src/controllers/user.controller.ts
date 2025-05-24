@@ -8,7 +8,8 @@ export const loginFromTheGoogle = asyncHandler(async (req, res, _) => {
   
   const { credentials, clientId } = req.body;
  
-
+  console.log(credentials);
+  
   const { userData, refreshToken, accessToken } =
     await userService.loginWithGoogle({
       credentials: credentials,
