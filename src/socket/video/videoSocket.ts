@@ -3,13 +3,13 @@ import { socketAuthMiddleware } from "../../middlewares/index.js";
 import { Namespace, Socket, type DefaultEventsMap } from "socket.io";
 import VideoCallSocketByUserQueue from "../../services/redis_service/VideoCallSocketByUserQueue.js";
 import ActiveCallRedisMap from "../../services/redis_service/ActiveCallRedisMap.js";
-let time = 0;
+
 
 
 class VideoSocket {
     private _io: Namespace;
     private socketsByUser = new VideoCallSocketByUserQueue(); // Redis-backed map of userId -> socketId
-    private activeCalls = new ActiveCallRedisMap();
+    private activeCalls = new ActiveCallRedisMap(); // Redist-backend map of callerId -> calleId
 
 
     constructor(io: Namespace) {
@@ -30,13 +30,8 @@ class VideoSocket {
     private async findRandomUser(socket: Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap>, userId: string, filters = {}) {
         await VideoCallUserQueue.addUser(userId, filters);
 
-
-
         const matchUserId = await VideoCallUserQueue.findMatch(userId, filters);
-        // console.log("start*************************  ", time++ );
-        // console.log(matchUserId);
 
-        // console.log("end*************************", time);
         if (matchUserId) {
             if (userId === matchUserId) {
                 // Avoid self-matching (only one user in queue)
@@ -64,12 +59,10 @@ class VideoSocket {
                 partnerSocket.emit("user:match-found", { partnerId: userId, isCaller: false });
                 await this.activeCalls.setCall(userId, matchUserId);
             } else {
-                socket.emit("user:not-found");
+                socket.emit("user:not-found", { message: "Partner is not available try again..." });
             }
         } else {
             // No match yet, keep waiting     
-
-
             await VideoCallUserQueue.addUser(userId, filters);
             socket.emit("wait");
         }
@@ -80,19 +73,29 @@ class VideoSocket {
      * Handles all socket events related to video calling.
      */
     private async handleConnection(socket: Socket) {
-        const userId = socket.data.user._id;
-        console.log(userId);
-
+        const userId = socket.data.user._id; // When user connected to the video socket first time he/she will get authenticated and if they get authorized to call then there userId will be save in the socket, so get that userId
 
         // Map userId -> socketId in Redis for lookup
         await this.socketsByUser.set(userId, socket);
 
+
+        /**
+         * Handel the online user counts event
+         */
+
+        const onlineCount = await this.getOnlineUserCountSomehow(); // get the total counts from the map
+        socket.broadcast.emit("onlineUsersCount", { count: onlineCount });
+        socket.emit("onlineUsersCount", { count: onlineCount });
+
+
+
         // Event: When user wants to start random video call
         socket.on("start:random-video-call", async ({ filters }) => {
             try {
-                this.findRandomUser(socket, userId, filters);
+                this.findRandomUser(socket, userId, filters); // Call the method that helps to find the random-user based in the filters
             } catch (error) {
-                socket.emit("match:error", {
+                // If any things un-expected happens then emit the video:global:error event
+                socket.emit("video:global:error", {
                     message:
                         error instanceof Error
                             ? error.message
@@ -119,11 +122,12 @@ class VideoSocket {
                 // Send offer to callee
                 calleeSocket.emit("receive-call", { offer, from: userId });
             } catch (error) {
-                socket.emit("call-error", {
+                // If any things un-expected happens then emit the video:global:error event
+                socket.emit("video:global:error", {
                     message:
                         error instanceof Error
                             ? error.message
-                            : "Error during call attempt.",
+                            : "Something went wrong while calling the user.",
                 });
             }
         });
@@ -143,11 +147,12 @@ class VideoSocket {
                 // Send answer back to caller
                 callerSocket.emit("call-accepted", { from: userId, answer });
             } catch (error) {
-                socket.emit("call-error", {
+                // If any things un-expected happens then emit the video:global:error event
+                socket.emit("video:global:error", {
                     message:
                         error instanceof Error
                             ? error.message
-                            : "Error during call acceptance.",
+                            : "Something went wrong while accepting the call.",
                 });
             }
         });
@@ -163,23 +168,26 @@ class VideoSocket {
 
                 // Forward ICE candidate
                 targetSocket.emit("ice-candidate", { candidate });
-            } catch {
-                // Optional: log error
+            } catch (error) {
+                // If any things un-expected happens then emit the video:global:error event
+                socket.emit("video:global:error", {
+                    message:
+                        error instanceof Error
+                            ? error.message
+                            : "Something went wrong while handeling the ice candicate",
+                });
             }
         });
 
         // Event: User ends the call manually
         socket.on("end-call", async ({ partnerId }) => {
             try {
-                // console.log(partnerId);
-                console.log("call end");
-
-
                 // Always remove user from queues
                 await VideoCallUserQueue.removeUser(userId);
-                await this.activeCalls.deleteCall(userId, partnerId);
+
 
                 if (partnerId) {
+                    await this.activeCalls.deleteCall(userId, partnerId);
 
                     // Remove partner too
                     await VideoCallUserQueue.removeUser(partnerId);
@@ -194,10 +202,14 @@ class VideoSocket {
                         }
                     }
                 }
-            } catch {
-                console.log("error");
-
-                // Optional: log error
+            } catch (error) {
+                // If any things un-expected happens then emit the video:global:error event
+                socket.emit("video:global:error", {
+                    message:
+                        error instanceof Error
+                            ? error.message
+                            : "Something went wrong while ending the call.",
+                });
             }
         });
 
@@ -222,31 +234,60 @@ class VideoSocket {
                         }
                     } else {
                         socket.emit("user:call-ended", { isEnder: false });
+                        return;
                     }
                 }
-            } catch {
-                // Optional: log error
+            } catch (error) {
+                // If any things un-expected happens then emit the video:global:error event
+                socket.emit("video:global:error", {
+                    message:
+                        error instanceof Error
+                            ? error.message
+                            : "Something went wrong while trying next-call.",
+                });
             }
         });
+
 
         // Handle disconnection and clean up state
         socket.on("disconnect", async (reason) => {
-            // console.log(`User ${userId} disconnected: ${reason}`);
-            this.socketsByUser.delete(userId); // Remove from Redis socket-user map
-            VideoCallUserQueue.removeUser(userId).catch(() => { }); // Remove from queue
-            const partnerId = await this.activeCalls.getPartner(userId);
-            if (partnerId) {
-                const partnerSocketId = await this.socketsByUser.get(partnerId);
-                if (partnerSocketId) {
-                    const partnerSocket = this._io.sockets.get(partnerSocketId);
-                    if (partnerSocket) {
-                        partnerSocket.emit("user:call-ended", {isEnder: false});
+            try {
+                this.socketsByUser.delete(userId); // Remove from Redis socket-user map
+                VideoCallUserQueue.removeUser(userId).catch(() => { }); // Remove from queue
+                const partnerId = await this.activeCalls.getPartner(userId);
+                if (partnerId) {
+                    const partnerSocketId = await this.socketsByUser.get(partnerId);
+                    if (partnerSocketId) {
+                        const partnerSocket = this._io.sockets.get(partnerSocketId);
+                        if (partnerSocket) {
+                            partnerSocket.emit("user:call-ended", { isEnder: false });
+
+                        }
                     }
+                    await this.activeCalls.deleteCall(partnerId, userId);
                 }
+
+                const onlineCount = await this.getOnlineUserCountSomehow(); // get the total counts from the map
+                socket.broadcast.emit("onlineUsersCount", { count: onlineCount });
+                socket.emit("onlineUsersCount", { count: onlineCount });
+
+            } catch (error) {
+                // If any things un-expected happens then emit the video:global:error event
+                socket.emit("video:global:error", {
+                    message:
+                        error instanceof Error
+                            ? error.message
+                            : "Something went wrong while disconnecting the user.",
+                });
             }
 
-
         });
+    }
+
+
+    private async getOnlineUserCountSomehow() {
+        return await this.socketsByUser.count();
+
     }
 }
 

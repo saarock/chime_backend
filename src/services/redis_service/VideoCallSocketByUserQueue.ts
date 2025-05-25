@@ -2,43 +2,60 @@ import type { DefaultEventsMap, Socket } from "socket.io";
 import { client } from "../../configs/redis.js";
 
 class VideoCallSocketByUserQueue {
+    private static redisKey = "videoSocket:users"; // Redis SET of online user IDs
+
     /**
-     * Store the socket ID under a Redis key.
+     * Store the socket ID and add user ID to set of active users.
      */
     public async set(
         userId: string,
         socket: Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap>
     ): Promise<void> {
-        await client.set(`videoSocket:${userId}`, socket.id);
+        await Promise.all([
+            client.set(`videoSocket:${userId}`, socket.id),
+            client.sAdd(VideoCallSocketByUserQueue.redisKey, userId),
+        ]);
     }
 
     /**
-     * Retrieve and delete the socket ID for a user.
-     * Returns the socket ID string or null if not found.
+     * Retrieve the socket ID for a user.
      */
     public async get(userId: string): Promise<string | null> {
-        const socketId = await client.get(`videoSocket:${userId}`);
-        if (!socketId) {
-            return null;
-        }
-        return socketId;
+        return await client.get(`videoSocket:${userId}`);
     }
 
     /**
-     * Update is really the same as set for this use‑case.
+     * Same as set in this case.
      */
     public async update(
         userId: string,
         socket: Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap>
     ): Promise<void> {
-        await client.set(`videoSocket:${userId}`, socket.id);
+        await this.set(userId, socket);
     }
 
     /**
-     * Delete the stored socket ID.
+     * Remove socket ID and user from online set.
      */
     public async delete(userId: string): Promise<void> {
-        await client.del(`videoSocket:${userId}`);
+        await Promise.all([
+            client.del(`videoSocket:${userId}`),
+            client.sRem(VideoCallSocketByUserQueue.redisKey, userId),
+        ]);
+    }
+
+    /**
+     * Get total number of online users.
+     */
+    public async count(): Promise<number> {
+        return await client.sCard(VideoCallSocketByUserQueue.redisKey);
+    }
+
+    /**
+     * Get all user IDs who are currently online.
+     */
+    public async getAllOnlineUserIds(): Promise<string[]> {
+        return await client.sMembers(VideoCallSocketByUserQueue.redisKey);
     }
 }
 
