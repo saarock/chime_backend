@@ -1,5 +1,4 @@
-import { createClient } from 'redis';
-
+import { createClient } from "redis";
 
 // for user data only http client
 const client = createClient({
@@ -11,9 +10,6 @@ const client = createClient({
 });
 
 console.log(process.env.REDIS_URL);
-
-
-
 
 client.on("error", (err: any) => console.error("❌ Redis Error:", err));
 client.on("connect", () => console.log("✅ Connected to Redis"));

@@ -14,13 +14,12 @@ class ApiError extends Error {
     stack?: string,
     errorCode?: string,
   ) {
-   
     super(message);
     this.statusCode = statusCode;
     this.message = message;
     this.data = null;
     this.success = false;
-    this.errorCode = errorCode ? errorCode : ""
+    this.errorCode = errorCode ? errorCode : "";
     this.errors = errors && errors?.length > 0 ? errors : [];
     this.stack = stack || new Error().stack || "";
   }

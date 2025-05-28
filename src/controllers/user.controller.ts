@@ -5,11 +5,10 @@ import { ApiError, ApiResponse, asyncHandler } from "../utils/index.js";
 
 // Login from google controller
 export const loginFromTheGoogle = asyncHandler(async (req, res, _) => {
-  
   const { credentials, clientId } = req.body;
- 
+
   console.log(credentials);
-  
+
   const { userData, refreshToken, accessToken } =
     await userService.loginWithGoogle({
       credentials: credentials,
@@ -45,8 +44,7 @@ export const generateAnotherAccessAndRefreshToken = asyncHandler(
         userId,
         clientToken.refreshToken,
       );
-  
-      
+
     return res
       .status(200)
       .json(

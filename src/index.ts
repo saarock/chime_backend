@@ -17,10 +17,7 @@ app.get("/", (req: Request, res: Response) => {
   res.send("Hello World!");
 });
 
-
-import { connectMonogoDbDataBase, connectRedis } from "./configs/index.js"
-
-
+import { connectMonogoDbDataBase, connectRedis } from "./configs/index.js";
 
 // Connect to the mongoDb database
 connectMonogoDbDataBase()

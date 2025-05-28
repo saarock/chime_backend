@@ -120,8 +120,6 @@ class UserService {
 
     if (!userData) throw new ApiError(404, "User not found");
 
-    
-
     // return the data to the controller
     return userData;
   }
@@ -148,8 +146,6 @@ class UserService {
 
     // compare database refreshToken and client token
     if (currentUser.refreshToken === refreshTokenFromClient) {
-   
-      
       const userRedisCacheData =
         await this.#userHelper.getUserRedisCacheData(userId);
 
@@ -179,7 +175,7 @@ class UserService {
       throw new ApiError(
         403,
         "You do not have permission for the requested action",
-        ["while refreshing the token"]
+        ["while refreshing the token"],
       );
     }
   }

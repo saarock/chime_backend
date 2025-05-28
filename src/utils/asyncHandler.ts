@@ -12,8 +12,6 @@ const asyncHandler =
     try {
       return await fn(req, res, next);
     } catch (error: any) {
-    
-      
       res
         .status(
           error.statusCode

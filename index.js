@@ -12,28 +12,28 @@ const httpServer = createServer(app);
 // initialize socket.io
 initSockets(httpServer);
 app.get("/", (req, res) => {
-    res.send("Hello World!");
+  res.send("Hello World!");
 });
 import { connectMonogoDbDataBase, connectRedis } from "./src/configs/index.js";
 // Connect to the mongoDb database
 connectMonogoDbDataBase()
-    .then(() => {
+  .then(() => {
     // After connecting to the mongodb database connect to the redis
     connectRedis()
-        .then(() => {
+      .then(() => {
         httpServer.listen(port, () => {
-            // ✅ CHANGED THIS LINE!
-            console.log(`Server is running on port ${port}`);
+          // ✅ CHANGED THIS LINE!
+          console.log(`Server is running on port ${port}`);
         });
-    })
-        .catch((error) => {
+      })
+      .catch((error) => {
         // Handle error if error occurs while connecting to redis
         console.log(`Error: ${error.message}`);
         process.exit(1);
-    });
-})
-    .catch((error) => {
+      });
+  })
+  .catch((error) => {
     // Handle error if error occurs while connecting to mongodb
     console.log(`Error: ${error.message}`);
     process.exit(1);
-});
+  });

@@ -65,9 +65,6 @@ class UserHelper {
     }
     return null;
   };
-
-
-
 }
 
 const userHelper = new UserHelper();

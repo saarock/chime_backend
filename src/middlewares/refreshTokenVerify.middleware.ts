@@ -5,7 +5,7 @@ import { ApiError, asyncHandler, token } from "../utils/index.js";
 export const verifyJWTRefreshToken = asyncHandler(
   async (req: Request, _: Response, next: NextFunction) => {
     const { refreshToken } = req.body;
- 
+
     if (
       refreshToken === undefined ||
       refreshToken === null ||
