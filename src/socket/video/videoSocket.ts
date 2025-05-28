@@ -49,13 +49,13 @@ class VideoSocket {
       // Get matched user's socket ID
       const partnerSocketId = await this.socketsByUser.get(matchUserId);
 
+
       if (!partnerSocketId) {
         socket.emit("user:not-found");
         return;
       }
 
       const partnerSocket = this._io.sockets.get(partnerSocketId);
-
       if (partnerSocket) {
         socket.emit("user:match-found", {
           partnerId: matchUserId,
@@ -78,28 +78,47 @@ class VideoSocket {
     }
   }
 
+
+
+
+
+  private async disconnectPreviousIfExists(userId: string): Promise<void> {
+    const prevSocketId = await this.socketsByUser.get(userId);
+    if (!prevSocketId) return;
+
+    const prevSocket = this._io.sockets.get(prevSocketId);
+    if (prevSocket) {
+      // Notify the old socket that it's being disconnected
+      prevSocket.emit("duplicate:connection", {
+        message: "You were disconnected because your account logged in elsewhere. Pleased reload the page to get connected again.",
+      });
+      // Disconnect the old socket
+      prevSocket.disconnect(true);
+    }
+
+    // Remove old reference
+    await this.socketsByUser.delete(userId);
+  }
+
+
+
   /**
    * Called when a user successfully connects to the socket namespace.
    * Handles all socket events related to video calling.
    */
   private async handleConnection(socket: Socket) {
+
     const userId = socket.data.user._id; // When user connected to the video socket first time he/she will get authenticated and if they get authorized to call then there userId will be save in the socket, so get that userId
 
-    // Map userId -> socketId in Redis for lookup
+    // Disconnect any previous connection for this user
+    await this.disconnectPreviousIfExists(userId);
+
     await this.socketsByUser.set(userId, socket);
-
-    /**
-     * Handel the online user counts event
-     */
-
-    const onlineCount = await this.getOnlineUserCountSomehow(); // get the total counts from the map
-    socket.broadcast.emit("onlineUsersCount", { count: onlineCount });
-    socket.emit("onlineUsersCount", { count: onlineCount });
 
     // Event: When user wants to start random video call
     socket.on("start:random-video-call", async ({ filters }) => {
       try {
-        this.findRandomUser(socket, userId, filters); // Call the method that helps to find the random-user based in the filters
+        await this.findRandomUser(socket, userId, filters); // Call the method that helps to find the random-user based in the filters
       } catch (error) {
         // If any things un-expected happens then emit the video:global:error event
         socket.emit("video:global:error", {
@@ -111,10 +130,20 @@ class VideoSocket {
       }
     });
 
+    /**
+ * Handel the online user counts event
+ */
+    socket.on("onlineUsersCount", async () => {
+      const onlineCount = await this.getOnlineUserCountSomehow(); // get the total counts from the map
+      socket.emit("onlineUsersCount", { count: onlineCount });
+    });
+
     // Event: Caller sends offer to callee
     socket.on("call-user", async ({ to, offer }) => {
       try {
         const calleeSocketId = await this.socketsByUser.get(to);
+        console.log("ohyes");
+
         if (!calleeSocketId) {
           socket.emit("call-error", { message: "User not available now." });
           return;
@@ -261,8 +290,10 @@ class VideoSocket {
     // Handle disconnection and clean up state
     socket.on("disconnect", async (reason) => {
       try {
+        console.log("delete");
+
         this.socketsByUser.delete(userId); // Remove from Redis socket-user map
-        VideoCallUserQueue.removeUser(userId).catch(() => {}); // Remove from queue
+        VideoCallUserQueue.removeUser(userId).catch(() => { }); // Remove from queue
         const partnerId = await this.activeCalls.getPartner(userId);
         if (partnerId) {
           const partnerSocketId = await this.socketsByUser.get(partnerId);
@@ -271,7 +302,7 @@ class VideoSocket {
             if (partnerSocket) {
               partnerSocket.emit("user:call-ended", { isEnder: false });
             }
-          }
+          };
           await this.activeCalls.deleteCall(partnerId, userId);
         }
 
