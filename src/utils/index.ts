@@ -3,6 +3,7 @@ import ApiError from "./ApiError.js";
 import asyncHandler from "./asyncHandler.js";
 import ApiResponse from "./ApiResponse.js";
 import verifyGoogleToken from "./verifyGoogleToken.js";
+import token from "./token.js";
 
 // export
-export { ApiError, asyncHandler, ApiResponse, verifyGoogleToken };
+export { ApiError, asyncHandler, ApiResponse, verifyGoogleToken, token };

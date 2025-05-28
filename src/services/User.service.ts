@@ -141,7 +141,7 @@ class UserService {
     }
 
     if (!currentUser.refreshToken || currentUser.refreshToken.trim() === "") {
-      throw new ApiError(404, "RefreshToken not found user is already logout");
+      throw new ApiError(401, "You are authorized to perform this action");
     }
 
     // compare database refreshToken and client token
@@ -175,6 +175,7 @@ class UserService {
       throw new ApiError(
         403,
         "You do not have permission for the requested action",
+        ["while refreshing the token"],
       );
     }
   }

@@ -28,6 +28,7 @@ const asyncHandler =
             error?.message ?? "Something is wrong",
             [],
             error instanceof Error ? error.stack : "",
+            error?.errorCode ?? "Something went wrong",
           ),
         );
     }

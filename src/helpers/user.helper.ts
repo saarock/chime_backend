@@ -3,14 +3,13 @@ import { client } from "../configs/index.js";
 import { User } from "../models/index.js";
 import type { User as userTypes } from "../types/index.js";
 import { ApiError } from "../utils/index.js";
-import jwt, { type JwtPayload } from "jsonwebtoken";
 
 class UserHelper {
   // this cache helper method is just for the authentication and authorization user data cache other core cache are in the cache folder
   cacheTheUserDataById = async (key: string, value: string) => {
     try {
       // Cache the user data in Redis (excluding sensitive data)
-      await client.set(key, value, {
+      await client.set(`user:${key}`, value, {
         EX: 3600,
         NX: true,
       }); // Cache expires in 1 hour (3600 seconds)
@@ -60,41 +59,12 @@ class UserHelper {
 
   // Get the cache data by userId
   getUserRedisCacheData = async (userId: string): Promise<userTypes | null> => {
-    const userCacheData = await client.get(userId);
+    const userCacheData = await client.get(`user:${userId}`);
     if (userCacheData && JSON.parse(userCacheData)) {
       return JSON.parse(userCacheData);
     }
     return null;
   };
-
-  // Verify refreshToken which is used by the middleware
-  verifyRefreshToken(refreshToken: string): JwtPayload {
-    const jwtSecret = process.env.REFRESH_TOKEN_SECRET;
-    if (
-      !refreshToken ||
-      !jwtSecret ||
-      !jwtSecret?.trim() ||
-      !refreshToken?.trim()
-    ) {
-      throw new ApiError(
-        400,
-        "Secret key not found",
-        ["Key NotFound", "Server Error"],
-        "At auth.middleware.js file line number 20 to 21",
-      );
-    }
-
-    try {
-      const decoded = jwt.verify(refreshToken, jwtSecret) as JwtPayload;
-      return decoded;
-    } catch (error) {
-      /** If the token is inValid then throw the Error yourself
-       * @note Even If you don't use here try catch and throw the error youself then also jwt.verify throw error
-       * if the token is invalid which is eventually handled by asynHandler automatically
-       */
-      throw new ApiError(401, "Refresh Token invalid or expired");
-    }
-  }
 }
 
 const userHelper = new UserHelper();

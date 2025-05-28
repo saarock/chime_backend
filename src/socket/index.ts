@@ -1,29 +1,19 @@
-import { Server, Socket } from "socket.io";
-import { createAdapter } from "@socket.io/redis-adapter";
-import { setupChatSocket } from "./chatSocket.js";
-import { setupVideoCallSocket } from "./videoCallSocket.js";
-import { client } from "../configs/index.js";
+import { Server } from "socket.io";
+import ChatSocket from "./chat/chatSocket.js";
+import VideoSocket from "./video/videoSocket.js";
 
 export const initSockets = (httpServer: any) => {
   const io = new Server(httpServer, {
     cors: {
       origin: process.env.CORS_ORIGIN || "http://localhost:5173",
+      methods: ["GET", "POST"],
+      credentials: true,
     },
   });
 
-  // const subClient = client.duplicate();
-  // io.adapter(createAdapter(client, subClient));
-
-  io.on("connection", (socket: Socket) => {
-    console.log(`User connected: ${socket.id}`);
-
-    setupChatSocket(io, socket);
-    setupVideoCallSocket(io, socket);
-
-    socket.on("disconnect", () => {
-      console.log(`User disconnected: ${socket.id}`);
-    });
-  });
-
+  const chatNameSpace = io.of("/chat");
+  const videoNameSpace = io.of("/video");
+  new ChatSocket(chatNameSpace);
+  new VideoSocket(videoNameSpace);
   return io;
 };

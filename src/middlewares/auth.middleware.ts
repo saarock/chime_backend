@@ -2,6 +2,7 @@
 import { ApiError, asyncHandler } from "../utils/index.js";
 import { type Request, type Response, type NextFunction } from "express";
 import jwt, { type JwtPayload } from "jsonwebtoken";
+import { token as tokenUtil } from "../utils/index.js";
 
 /**
  * declare the global to set the extra key on express request
@@ -26,22 +27,11 @@ export const verifyJWT = asyncHandler(
         "Unauthorized request",
         ["Unauthorized request"],
         "At auth.middleware.js file line number 20 to 21",
+        "token_expired",
       );
     }
 
-    let decoded;
-
-    try {
-      decoded = jwt.verify(token, jwtScret);
-    } catch (err) {
-      throw new ApiError(
-        401,
-        "Invalid or expired token",
-        ["Invalid or expired token"],
-        "At auth.middleware.js file line number 34 to 41",
-      );
-    }
-
+    let decoded = tokenUtil.verifyAccessToken(token);
     req.user = decoded;
     next();
   },

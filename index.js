@@ -1,24 +1,20 @@
 // Import all the necessary dependencies
-
-import app from "./app.js";
+import dotenv from "dotenv";
+// config the dotenv
+dotenv.config();
+import app from "./src/app.js";
 import { createServer } from "http";
-import { type Request, type Response } from "express";
-import { initSockets } from "./socket/index.js";
-
+import {} from "express";
+import { initSockets } from "./src/socket/index.js";
 const port = process.env.PORT || 3000;
-
 // Import the socket to initialize
 const httpServer = createServer(app);
-
 // initialize socket.io
 initSockets(httpServer);
-
-app.get("/", (req: Request, res: Response) => {
+app.get("/", (req, res) => {
   res.send("Hello World!");
 });
-
-import { connectMonogoDbDataBase, connectRedis } from "./configs/index.js";
-
+import { connectMonogoDbDataBase, connectRedis } from "./src/configs/index.js";
 // Connect to the mongoDb database
 connectMonogoDbDataBase()
   .then(() => {

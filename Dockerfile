@@ -1,15 +1,23 @@
-FROM node:22
+# Use official Node.js LTS image (includes npm)
+FROM node:20-alpine
 
-WORKDIR /chime_back
+# Create app directory
+WORKDIR /app
 
-# Install app dependencies
-COPY package*.json .
-RUN npm install 
-RUN npm add global nodemon
+# Copy package files first for caching npm install layer
+COPY package.json package-lock.json ./
 
+# Install dependencies
+RUN npm install
+
+# Copy all source files (including tsconfig.json, src folder)
 COPY . .
 
-EXPOSE 3000
+# Build TypeScript to JavaScript (outputs to dist/)
+RUN npx tsc
 
-CMD [ "npm", "run", "dev" ]
+# Expose port your app listens on
+EXPOSE 8000
 
+# Start the app from compiled JS
+CMD ["node", "dist/index.js"]
