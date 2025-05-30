@@ -6,7 +6,7 @@ import {
   verifyUser,
 } from "../controllers/index.js";
 import { Router } from "express";
-import { logOutUser } from "../controllers/user.controller.js";
+import { addUserImportantData, logOutUser } from "../controllers/user.controller.js";
 
 const userRouter = Router();
 
@@ -22,4 +22,6 @@ userRouter.post(
 );
 // Logout user
 userRouter.post("/logout-user", verifyJWT, logOutUser);
+// Add user importand data [age, country and gender]
+userRouter.post("/add-user-important-details", verifyJWT, addUserImportantData);
 export default userRouter;

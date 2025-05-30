@@ -6,6 +6,13 @@ export interface Filters {
   age?: string | null;
 }
 
+export interface UserDetails {
+  country?: string | null;
+  gender?: string | null;
+  age?: string | null;
+}
+
+
 /**
  * Utility class to manage video call user matching with Redis.
  * Supports optional filters: country, gender, age.
@@ -22,39 +29,43 @@ export default class VideoCallUserQueue {
    * @param userId - Unique identifier for the user.
    * @param filters - Optional filter criteria.
    */
-  static async addUser(userId: string, filters: Filters = {}): Promise<void> {
+  static async addUser(
+    userId: string,
+    filters: Filters = {},
+    userDetails: UserDetails = {}
+  ): Promise<void> {
     if (!userId) throw new Error("addUser: userId is required");
 
-    // Normalize filters
+    const metaKey = this.metadataKey(userId);
+
+    // Save userDetails always to perform better delete operation at the future
+    await client.hSet(metaKey, {
+      country: userDetails.country ?? "none",
+      gender: userDetails.gender ?? "none",
+      age: userDetails.age ?? "none",
+    });
+
+    // Determine filters to use for queue placement
     const country = filters.country ?? null;
     const gender = filters.gender ?? null;
     const age = filters.age ?? null;
 
-    const metaKey = this.metadataKey(userId);
-
-    // Store the user's filter metadata for later cleanup
-    await client.hSet(metaKey, {
-      country: country || "none",
-      gender: gender || "none",
-      age: age || "none",
-    });
-
-    // Determine which Redis sets to add the user to
     const setsToAdd: string[] = [];
+
     if (country) setsToAdd.push(`waiting:country:${country}`);
     if (gender) setsToAdd.push(`waiting:gender:${gender}`);
     if (age) setsToAdd.push(`waiting:age:${age}`);
 
+    // Core Logic: If no filters are passed → use general queue
     if (setsToAdd.length === 0) {
-      // No filters provided: use general waiting list
       await client.sAdd("waiting:all", userId);
     } else {
-      // Add to each specific filter-based set
       for (const key of setsToAdd) {
         await client.sAdd(key, userId);
       }
     }
   }
+
 
   /**
    * Remove a user from all waiting queues and delete metadata.
@@ -70,7 +81,7 @@ export default class VideoCallUserQueue {
     // Retrieve stored metadata
     const userData = await client.hGetAll(metaKey);
     if (!userData || Object.keys(userData).length === 0) {
-      await client.del(metaKey);
+      await client.del(metaKey); // Clean up completely key
       return;
     }
 
@@ -119,7 +130,7 @@ export default class VideoCallUserQueue {
     } else if (setsToCheck.length === 1) {
       // Single filter: pop from that specific set
       matchedUserId = await client.sPop(setsToCheck[0]);
-    } else {
+    } else if (setsToCheck.length > 1) {
       // Multiple filters: find intersection
       const candidates = await client.sInter(setsToCheck);
       if (candidates?.length) {
@@ -129,6 +140,9 @@ export default class VideoCallUserQueue {
           await client.sRem(key, matchedUserId);
         }
       }
+    } else {
+      // If no user found to the corresponding filter then pop the user from the waiting:all
+      matchedUserId = await client.sPop("waiting:all");
     }
 
     // If matched, clean up their metadata too

@@ -1,12 +1,14 @@
+// Import all the necessary dependencies here
 import { OAuth2Client, type TokenPayload } from "google-auth-library";
-import type { UserLoginWithGoogleDetils } from "../types/index.js";
+import type { UserLoginWithGoogleDetails } from "../types/index.js";
+import axios from "axios";
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 const verifyGoogleToken = async (
-  googleTokens: UserLoginWithGoogleDetils,
+  googleTokens: UserLoginWithGoogleDetails,
 ): Promise<TokenPayload | undefined> => {
   const ticket = await client.verifyIdToken({
-    idToken: googleTokens.credentials,
+    idToken: googleTokens.credential,
     audience: googleTokens.clientId,
   });
 
@@ -15,7 +17,8 @@ const verifyGoogleToken = async (
   if (!payload) {
     return undefined;
   }
-
+  
+  // if every things all-right return the payload
   return payload;
 };
 

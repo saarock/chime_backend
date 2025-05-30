@@ -44,7 +44,7 @@ const userSchema = new Schema(
     },
     gender: {
       type: String,
-      enum: ["male", "female", "other"],
+      enum: ["male", "female", "non-binary"],
     },
 
     relationShipStatus: {
@@ -64,6 +64,9 @@ const userSchema = new Schema(
       default: "user",
       required: [true, "role is reqruied!"],
       enum: ["user", "admin"],
+    },
+    country: {
+      type: String,
     },
     refreshToken: {
       type: String,

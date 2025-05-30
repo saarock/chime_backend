@@ -2,7 +2,8 @@
 // Improt all the necessary dependencies here
 
 import type { Document } from "mongoose";
-
+// user.type.ts
+export type Gender = "male" | "female" | "other";
 // User type
 export interface User {
   _id: string;
@@ -12,7 +13,7 @@ export interface User {
   phoneNumber: string;
   profilePicture?: string;
   age: string;
-  gender: ["male", "female", "other"];
+  gender: Gender;
   relationShipStatus?: ["single", "mingle", "not-interest"];
   active: boolean;
   country: string;
@@ -25,9 +26,9 @@ export interface User {
 
 // User LoginWithGoogleType for google login
 
-export interface UserLoginWithGoogleDetils {
+export interface UserLoginWithGoogleDetails {
   clientId: string;
-  credentials: string;
+  credential: string;
 }
 
 // User document type
@@ -51,4 +52,12 @@ export interface RefreshTokenPayloadTypes {
   _id: string;
   iat: number;
   exp: number;
+}
+
+
+export interface UserImpDetails {
+  age: number;
+  country: string;
+  gender: string;
+  userId: string;
 }
