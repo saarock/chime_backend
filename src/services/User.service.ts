@@ -236,7 +236,7 @@ class UserService {
 
     // 3. Apply all updates at once
     user.age = age;
-    user.country = country.toLowerCase();
+    user.country = country;
     user.gender = gender.toLowerCase();
     await user.save();
 
@@ -251,7 +251,7 @@ class UserService {
     // 5. Cache it
     await userHelper.cacheTheUserDataById(userId, JSON.stringify(updated));
 
-    
+
     // 6. Return just the important details
     const result: UserImpDetails = {
       age: Number(updated.age),

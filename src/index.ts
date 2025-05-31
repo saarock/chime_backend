@@ -5,7 +5,7 @@ import { createServer } from "http";
 import { type Request, type Response } from "express";
 import { initSockets } from "./socket/index.js";
 
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 8000;
 
 // Import the socket to initialize
 const httpServer = createServer(app);

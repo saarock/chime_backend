@@ -15,5 +15,7 @@ export const initSockets = (httpServer: any) => {
   const videoNameSpace = io.of("/video");
   new ChatSocket(chatNameSpace);
   new VideoSocket(videoNameSpace);
+  console.log("yes");
+  
   return io;
 };

@@ -1,5 +1,5 @@
 // Import all the necessary dependencies here
-import VideoCallUserQueue from "../../services/redis_service/VideoCallUserQueue.js";
+import VideoCallUserQueue, { type Filters } from "../../services/redis_service/VideoCallUserQueue.js";
 import { socketAuthMiddleware } from "../../middlewares/index.js";
 import { Namespace, Socket, type DefaultEventsMap } from "socket.io";
 import VideoCallSocketByUserQueue from "../../services/redis_service/VideoCallSocketByUserQueue.js";
@@ -41,16 +41,26 @@ class VideoSocket {
   private async findRandomUser(
     socket: Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap>,
     userId: string,
-    filters = {},
+    filters: Filters,
     userDetails = {}
   ) {
+
     // Add current user to waiting queue with filters
     await VideoCallUserQueue.addUser(userId, filters, userDetails);
 
     // Try to find another waiting user matching the filters
-    const matchUserId = await VideoCallUserQueue.findMatch(userId, filters);
+    const matchUserId = await VideoCallUserQueue.findMatch(userId);
 
     if (matchUserId) {
+      // Check the user id already busy or not 
+      const isUserBusy = await this.activeCalls.getPartner(matchUserId);
+      if (isUserBusy) {
+        // Don't proceed, re-add the searching user and try again later
+        socket.emit("match-busy");
+        await VideoCallUserQueue.addUser(userId, filters, userDetails);
+        return;
+      }
+
       // If matched to self (only one user in queue), re-enqueue and notify
       if (userId === matchUserId) {
         await VideoCallUserQueue.addUser(userId, filters, userDetails);
@@ -80,7 +90,7 @@ class VideoSocket {
         socket.emit("user:not-found", { message: "Partner is not available, try again..." });
       }
     } else {
-      // No match yet; keep user waiting and notify
+      // No match yet; keep user waiting and notify      
       await VideoCallUserQueue.addUser(userId, filters, userDetails);
       socket.emit("wait");
     }
@@ -112,6 +122,8 @@ class VideoSocket {
    * @param socket - the connected client socket
    */
   private async handleConnection(socket: Socket) {
+    console.log("user connected");
+    
     const userId = socket.data.user._id;
 
     // Enforce single connection per user
@@ -132,6 +144,7 @@ class VideoSocket {
     socket.on("onlineUsersCount", async () => {
       const count = await this.getOnlineUserCountSomehow();
       socket.emit("onlineUsersCount", { count });
+      socket.broadcast.emit("onlineUsersCount", { count })
     });
 
     // WebRTC signaling: call offer
