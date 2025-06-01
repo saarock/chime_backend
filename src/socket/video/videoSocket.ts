@@ -55,7 +55,7 @@ class VideoSocket {
     // Try to find another waiting user matching the filters
     const matchUserId = await VideoCallUserQueue.findMatch(userId);
     const isUserBusy = await this.activeCalls.getPartner(userId);
-    
+
 
     if (isUserBusy) return; // If the caller is busy in  the call the do nothing
 
@@ -64,9 +64,9 @@ class VideoSocket {
 
       // Check the user id already busy or not 
       if (isPartnerIsBusy) { // If callee is in the call the send the event match-busy so caller can try others
-        // Don't proceed, re-add the searching user and try again later
-        socket.emit("match-busy");
-        await VideoCallUserQueue.addUser(userId, filters, userDetails);
+        // // Don't proceed, re-add the searching user and try again later
+        // socket.emit("match-busy");
+        // await VideoCallUserQueue.addUser(userId, filters, userDetails);
         const errorLogs = {
           where: "at findRandomUser",
           message: "partner is busy",
@@ -158,7 +158,10 @@ class VideoSocket {
     // Handle random video call initiation
     socket.on("start:random-video-call", async ({ filters, userDetails }) => {
       try {
-        await this.findRandomUser(socket, userId, filters, userDetails);             
+        const isInCall = await this.activeCalls.getPartner(userId);
+        if (isInCall) return;
+
+        await this.findRandomUser(socket, userId, filters, userDetails);
       } catch (error) {
         socket.emit("video:global:error", { message: error instanceof Error ? error.message : "Unexpected error finding match." });
         const errorLogs = {
@@ -180,7 +183,6 @@ class VideoSocket {
     // WebRTC signaling: call offer
     socket.on("call-user", async ({ to, offer }) => {
       try {
-
         const targetId = await this.socketsByUser.get(to);
 
         if (!targetId) {
@@ -212,6 +214,7 @@ class VideoSocket {
     // WebRTC signaling: call answer
     socket.on("call-accepted", async ({ to, answer }) => {
       try {
+        await this.activeCalls.setCall(userId, to);
         const callerId = await this.socketsByUser.get(to);
         if (!callerId) return socket.emit("call-error", { message: "User not available." });
 
@@ -280,11 +283,11 @@ class VideoSocket {
     // socket.on("join:video-call-queue", async ({ filters, userDetails, userId }) => {
     //   try {
     //   console.log(userId + " ths are th euseriod");
-              
+
     //     await VideoCallUserQueue.addUser(userId, filters, userDetails);
     //     socket.emit("wait");
 
-        
+
     //   } catch (error) {
     //     socket.emit("video:global:error", { message: error instanceof Error ? error.message : "Error while adding to the queueue." });
     //     const errorLogs = {

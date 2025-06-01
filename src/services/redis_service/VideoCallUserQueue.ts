@@ -67,7 +67,7 @@ export default class VideoCallUserQueue {
     }
 
     const metaKey = this.metadataKey(userId);
-    const EXPIRY_SECONDS = 60 * 5; // 5 minutes
+    const EXPIRY_SECONDS = 60 * 1; // 1 minutes
 
     // Normalize user’s own attributes
     const country = this.normalizeAttr(userDetails.country);
