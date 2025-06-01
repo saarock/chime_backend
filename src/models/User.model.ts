@@ -115,7 +115,7 @@ userSchema.methods.generateAccessToken = async function () {
     {
       _id: this._id,
       email: this.email,
-      userName: this.userName,
+      fullName: this.fullName,
     },
     secret,
     {

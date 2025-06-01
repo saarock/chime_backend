@@ -1,6 +1,6 @@
 // User controller
 import type { TokenPayloadTypes } from "types/index.js";
-import { userService } from "../services/index.js";
+import { userService } from "../services/databaseService/index.js";
 import { ApiError, ApiResponse, asyncHandler } from "../utils/index.js";
 
 // Login from google controller

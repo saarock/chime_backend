@@ -1,15 +1,15 @@
 // src/services/User.services.ts
 import type { TokenPayload } from "google-auth-library";
-import { User } from "../models/index.js";
+import { User } from "../../models/index.js";
 import type {
   TokenPayloadTypes,
   User as userTypes,
   UserLoginWithGoogleDetails,
   UserImpDetails,
-} from "../types/index.js";
-import verifyGoogleToken from "../utils/verifyGoogleToken.js";
-import ApiError from "../utils/ApiError.js";
-import userHelper from "../helpers/user.helper.js";
+} from "../../types/index.js";
+import verifyGoogleToken from "../../utils/verifyGoogleToken.js";
+import ApiError from "../../utils/ApiError.js";
+import userHelper from "../../helpers/user.helper.js";
 
 // UserService class for login, logout, register and other user related things
 class UserService {

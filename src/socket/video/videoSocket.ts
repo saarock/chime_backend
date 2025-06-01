@@ -4,6 +4,7 @@ import { socketAuthMiddleware } from "../../middlewares/index.js";
 import { Namespace, Socket, type DefaultEventsMap } from "socket.io";
 import VideoCallSocketByUserQueue from "../../services/redis_service/VideoCallSocketByUserQueue.js";
 import ActiveCallRedisMap from "../../services/redis_service/ActiveCallRedisMap.js";
+import { sendMessage } from "../../kafka/producer.js";
 
 /**
  * VideoSocket manages WebSocket connections for random video calling.
@@ -32,7 +33,10 @@ class VideoSocket {
   }
 
   /**
-   * Attempt to queue and match a random user based on filters.
+   * Attempt to queue and match a random user based on filters and @note this function is not responsible to connect to use
+   * , this function is only responsible for matchmaking under and filters that the caller and callee are busy or duplicate case
+   * this types of problem it handle and also go and search for the random-user based on the filter by findMatch function
+   * under that if the partner found the Kafka comes in.
    * @param socket - current client socket
    * @param userId - authenticated user ID
    * @param filters - optional filter criteria for matching
@@ -50,14 +54,25 @@ class VideoSocket {
 
     // Try to find another waiting user matching the filters
     const matchUserId = await VideoCallUserQueue.findMatch(userId);
+    const isUserBusy = await this.activeCalls.getPartner(userId);
+    
+
+    if (isUserBusy) return; // If the caller is busy in  the call the do nothing
 
     if (matchUserId) {
+      const isPartnerIsBusy = await this.activeCalls.getPartner(matchUserId);
+
       // Check the user id already busy or not 
-      const isUserBusy = await this.activeCalls.getPartner(matchUserId);
-      if (isUserBusy) {
+      if (isPartnerIsBusy) { // If callee is in the call the send the event match-busy so caller can try others
         // Don't proceed, re-add the searching user and try again later
         socket.emit("match-busy");
         await VideoCallUserQueue.addUser(userId, filters, userDetails);
+        const errorLogs = {
+          where: "at findRandomUser",
+          message: "partner is busy",
+          userId: userId,
+        }
+        await sendMessage("error-logs", errorLogs);
         return;
       }
 
@@ -65,31 +80,29 @@ class VideoSocket {
       if (userId === matchUserId) {
         await VideoCallUserQueue.addUser(userId, filters, userDetails);
         socket.emit("self-loop");
+        const errorLogs = {
+          where: "at findRandomUser",
+          message: "self-loop",
+          userId: userId,
+        }
+        await sendMessage("error-logs", errorLogs);
         return;
-      }
-
-      // Remove both users from their queues now that they are matched
-      await VideoCallUserQueue.removeUser(userId);
-      await VideoCallUserQueue.removeUser(matchUserId);
-
-      // Look up the partner's socket ID
-      const partnerSocketId = await this.socketsByUser.get(matchUserId);
-      if (!partnerSocketId) {
-        socket.emit("user:not-found");
-        return;
-      }
-
-      const partnerSocket = this._io.sockets.get(partnerSocketId);
-      if (partnerSocket) {
-        // Notify caller and callee of the match
-        socket.emit("user:match-found", { partnerId: matchUserId, isCaller: true });
-        partnerSocket.emit("user:match-found", { partnerId: userId, isCaller: false });
-        // Persist active call mapping in Redis
-        await this.activeCalls.setCall(userId, matchUserId);
-      } else {
-        socket.emit("user:not-found", { message: "Partner is not available, try again..." });
       }
     } else {
+      if (isUserBusy) {
+        const errorLogs = {
+          where: "at findRandomUser",
+          message: "User is busy.",
+          userId: userId,
+        }
+
+        await sendMessage("error-logs", errorLogs);
+        // If user is already in the call so just return
+        return;
+      }
+
+      // Before waiting first cleanup the user datas
+      await VideoCallUserQueue.removeUser(userId);
       // No match yet; keep user waiting and notify      
       await VideoCallUserQueue.addUser(userId, filters, userDetails);
       socket.emit("wait");
@@ -102,6 +115,7 @@ class VideoSocket {
    */
   private async disconnectPreviousIfExists(userId: string): Promise<void> {
     const prevSocketId = await this.socketsByUser.get(userId);
+
     if (!prevSocketId) return;
 
     const prevSocket = this._io.sockets.get(prevSocketId);
@@ -110,6 +124,12 @@ class VideoSocket {
       prevSocket.emit("duplicate:connection", {
         message: "You were disconnected because your account logged in elsewhere. Please reload the page to reconnect.",
       });
+      const errorLogs = {
+        where: "at videoSocket disconnectPreviousIfExist method",
+        message: "duplicate:connection",
+        userId: userId,
+      }
+      await sendMessage("error-logs", errorLogs);
       prevSocket.disconnect(true);
     }
 
@@ -122,21 +142,31 @@ class VideoSocket {
    * @param socket - the connected client socket
    */
   private async handleConnection(socket: Socket) {
-    console.log("user connected");
-    
+
     const userId = socket.data.user._id;
 
-    // Enforce single connection per user
+    // At the start of handleConnection:
     await this.disconnectPreviousIfExists(userId);
+
+
     // Cache this socket in Redis for lookups
     await this.socketsByUser.set(userId, socket);
+
+
+
 
     // Handle random video call initiation
     socket.on("start:random-video-call", async ({ filters, userDetails }) => {
       try {
-        await this.findRandomUser(socket, userId, filters, userDetails);
+        await this.findRandomUser(socket, userId, filters, userDetails);             
       } catch (error) {
         socket.emit("video:global:error", { message: error instanceof Error ? error.message : "Unexpected error finding match." });
+        const errorLogs = {
+          where: "start:random-video-call",
+          message: error instanceof Error ? error.message : "Something went wrong",
+          userId: userId,
+        }
+        await sendMessage("error-logs", errorLogs);
       }
     });
 
@@ -144,21 +174,38 @@ class VideoSocket {
     socket.on("onlineUsersCount", async () => {
       const count = await this.getOnlineUserCountSomehow();
       socket.emit("onlineUsersCount", { count });
-      socket.broadcast.emit("onlineUsersCount", { count })
+      socket.broadcast.emit("onlineUsersCount", { count });
     });
 
     // WebRTC signaling: call offer
     socket.on("call-user", async ({ to, offer }) => {
       try {
+
         const targetId = await this.socketsByUser.get(to);
-        if (!targetId) return socket.emit("call-error", { message: "User not available." });
+
+        if (!targetId) {
+          socket.emit("call-error", { message: "User not available." });
+          const errorLogs = {
+            where: "call-user",
+            message: "User not available.",
+            userId: userId,
+          }
+          await sendMessage("error-logs", errorLogs);
+          return;
+        }
 
         const targetSocket = this._io.sockets.get(targetId);
         if (!targetSocket) return socket.emit("call-error", { message: "User not available." });
 
-        targetSocket.emit("receive-call", { offer, from: userId });
+        targetSocket.emit("receive-call", { offer, from: userId, isCaller: false });
       } catch (error) {
         socket.emit("video:global:error", { message: error instanceof Error ? error.message : "Error during call offer." });
+        const errorLogs = {
+          where: "call-user",
+          message: error instanceof Error ? error.message : "Something went wrong",
+          userId: userId,
+        }
+        await sendMessage("error-logs", errorLogs);
       }
     });
 
@@ -169,9 +216,19 @@ class VideoSocket {
         if (!callerId) return socket.emit("call-error", { message: "User not available." });
 
         const callerSocket = this._io.sockets.get(callerId);
+        if (!callerSocket) return socket.emit("call-error", { message: "User is not online or active try others" })
         callerSocket?.emit("call-accepted", { from: userId, answer });
+        // Send the global message to the caller when the call acceptted
+        callerSocket?.emit('global:success:message', { message: `Connected to the ${socket.data.user.fullName}` });
+        socket.emit("global:success:message", { message: `Connected to the ${callerSocket?.data.user.fullName}` })
       } catch (error) {
         socket.emit("video:global:error", { message: error instanceof Error ? error.message : "Error during call answer." });
+        const errorLogs = {
+          where: "call-accepted",
+          message: error instanceof Error ? error.message : "Something went wrong",
+          userId: userId,
+        }
+        await sendMessage("error-logs", errorLogs);
       }
     });
 
@@ -183,6 +240,12 @@ class VideoSocket {
         targetSocket?.emit("ice-candidate", { candidate });
       } catch (error) {
         socket.emit("video:global:error", { message: error instanceof Error ? error.message : "Error forwarding ICE candidate." });
+        const errorLogs = {
+          where: "ice-candidate",
+          message: error instanceof Error ? error.message : "Something went wrong",
+          userId: userId,
+        }
+        await sendMessage("error-logs", errorLogs);
       }
     });
 
@@ -192,7 +255,9 @@ class VideoSocket {
         // Remove both parties from queues
         await VideoCallUserQueue.removeUser(userId);
         if (partnerId) {
-          await this.activeCalls.deleteCall(userId, partnerId);
+
+          const userCallLog = await this.activeCalls.deleteCall(partnerId, userId);
+          await sendMessage("video-end", userCallLog);
           await VideoCallUserQueue.removeUser(partnerId);
 
           const partnerSocketId = await this.socketsByUser.get(partnerId);
@@ -202,24 +267,61 @@ class VideoSocket {
         }
       } catch (error) {
         socket.emit("video:global:error", { message: error instanceof Error ? error.message : "Error ending call." });
+        const errorLogs = {
+          where: "end-call",
+          message: error instanceof Error ? error.message : "Something went wrong",
+          userId: userId,
+        }
+        await sendMessage("error-logs", errorLogs);
       }
     });
+
+
+    // socket.on("join:video-call-queue", async ({ filters, userDetails, userId }) => {
+    //   try {
+    //   console.log(userId + " ths are th euseriod");
+              
+    //     await VideoCallUserQueue.addUser(userId, filters, userDetails);
+    //     socket.emit("wait");
+
+        
+    //   } catch (error) {
+    //     socket.emit("video:global:error", { message: error instanceof Error ? error.message : "Error while adding to the queueue." });
+    //     const errorLogs = {
+    //       where: "At join:video-call-queue disconnect",
+    //       message: error instanceof Error ? error.message : "Something went wrong",
+    //       userId: userId,
+    //     }
+    //     await sendMessage("error-logs", errorLogs);
+    //   }
+    // });
+
 
     // Handle request to end current call and retry matching
     socket.on("go:and:tell:callee:call:ended:so:you:can:try:for:others", async ({ partnerId }) => {
       try {
-        if (partnerId) {
+        if (partnerId && userId) {
+          // Clean-up the user details from the user-queue
           await VideoCallUserQueue.removeUser(partnerId);
           await VideoCallUserQueue.removeUser(userId);
-          await this.activeCalls.deleteCall(userId, partnerId);
+
+          const userCallLog = await this.activeCalls.deleteCall(partnerId, userId);
+          await sendMessage("video-end", userCallLog);
 
           const partnerSocketId = await this.socketsByUser.get(partnerId);
           const partnerSocket = this._io.sockets.get(partnerSocketId!);
-          socket.emit("user:call-ended:try:for:other", { isEnder: true });
           partnerSocket?.emit("user:call-ended:try:for:other", { isEnder: false });
+          socket.emit("user:call-ended:try:for:other", { isEnder: true });
+
         }
       } catch (error) {
         socket.emit("video:global:error", { message: error instanceof Error ? error.message : "Error retrying match." });
+        const errorLogs = {
+          where: "At go:and:tell:callee:call:ended:so:you:can:try:for:others disconnect",
+          message: error instanceof Error ? error.message : "Something went wrong",
+          userId: userId,
+        }
+        await sendMessage("error-logs", errorLogs);
       }
     });
 
@@ -230,13 +332,29 @@ class VideoSocket {
         await this.socketsByUser.delete(userId);
         VideoCallUserQueue.removeUser(userId).catch(() => { });
 
+        if (!userId) {
+          console.log("no user Id");
+          socket.emit("video:global:error", { message: "pleased refresh your page and try again." });
+
+          const errorLogs = {
+            where: "At socket disconnect",
+            message: "userId not found",
+            userId: userId,
+          }
+          await sendMessage("error-logs", errorLogs);
+
+          return;
+        }
+
         // Notify partner if in an active call
         const partnerId = await this.activeCalls.getPartner(userId);
+
         if (partnerId) {
           const partnerSocketId = await this.socketsByUser.get(partnerId);
           const partnerSocket = this._io.sockets.get(partnerSocketId!);
           partnerSocket?.emit("user:call-ended", { isEnder: false });
-          await this.activeCalls.deleteCall(partnerId, userId);
+          const userCallLog = await this.activeCalls.deleteCall(partnerId, userId);
+          await sendMessage("video-end", userCallLog);
         }
 
         // Broadcast updated online user count
@@ -245,6 +363,13 @@ class VideoSocket {
         socket.emit("onlineUsersCount", { count });
       } catch (error) {
         socket.emit("video:global:error", { message: error instanceof Error ? error.message : "Error during disconnect cleanup." });
+
+        const errorLogs = {
+          where: "At socket disconnect",
+          message: error instanceof Error ? error.message : "Something went wrong ",
+          userId: userId,
+        }
+        await sendMessage("error-logs", errorLogs);
       }
     });
   }
@@ -254,6 +379,63 @@ class VideoSocket {
    */
   private async getOnlineUserCountSomehow() {
     return await this.socketsByUser.count();
+  }
+
+  /**
+   * 
+   * @param callerId - string callerUser id
+   * @param calleeId - string calleSocket id
+   * @param isCaller - {booelan} identifie that isCaller or not
+   * @returns 
+   */
+  public async matchFound(callerId: string, calleeId: string, isCaller: boolean) {
+
+    try {
+      const callerSocketId = await this.socketsByUser.get(callerId);
+      const calleeSocketId = await this.socketsByUser.get(calleeId);
+
+
+
+      if (!callerSocketId || !calleeSocketId) {
+        const errorLogs = {
+          where: "In matchFound method of videoSocket",
+          message: "CallerSocket id or CalleeSocket id not found",
+          userId: callerId,
+        }
+        await sendMessage("error-logs", errorLogs);
+        return;
+      }
+
+      const callerSocket = this._io.sockets.get(callerSocketId);
+      const calleeSocket = this._io.sockets.get(calleeSocketId);
+      if (!callerSocket || !calleeSocket) {
+        const errorLogs = {
+          where: "In matchFound method of videoSocket",
+          message: "CallerSocket or CalleeSocket not found",
+          userId: callerId,
+        }
+        await sendMessage("error-logs", errorLogs);
+        return;
+      }
+
+      if (isCaller) {
+        callerSocket.emit("user:match-found", { partnerId: calleeId, isCaller: true });
+        calleeSocket.emit("user:match-found", { partnerId: callerId, isCaller: false });
+        // Save active call state
+        await this.activeCalls.setCall(callerId, calleeId);
+      }
+
+    } catch (error) {
+      console.error(error);
+
+      const errorLogs = {
+        where: "In matchFound method of videoSocket",
+        message: error instanceof Error ? error.message : "Something went wrong ",
+        userId: callerId,
+      }
+      await sendMessage("error-logs", errorLogs);
+    }
+
   }
 }
 

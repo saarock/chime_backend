@@ -1,12 +1,6 @@
-/**
- * VideoCallUserQueue
- *
- * Manages a queue of users waiting for a video‐call match using Redis.
- * Implements Omegle-style random pairing with optional strict mutual filter enforcement,
- * and now supports progressive “partial” matching (two‐attribute, one‐attribute) before random fallback.
- */
+import { videoClient } from "../../configs/redis.js";
+import { sendMessage } from "../../kafka/producer.js";
 
-import { client } from "../../configs/redis.js";
 
 export interface Filters {
   country?: string | null;
@@ -57,10 +51,11 @@ export default class VideoCallUserQueue {
    * Add a user into the waiting pool.
    *
    * 1. Stores their metadata (country/gender/age + preferences).
-   * 2. Sets a 5-minute expiry on the metadata (so stale entries auto-expire).
+   * 2. Sets a 5-minute expiry on the metadata.
    * 3. Adds the user ID to the global "waiting:all" set.
-   * 4. If the user has a concrete country/gender/age (not "any"), it also
-   *    adds them to the corresponding "waiting:country:...", "waiting:gender:...", etc.
+   * 4. Adds them to single‐attribute sets if concrete.
+   * 5. Adds them to compound sets for each pair/triple of their own attributes.
+   * 6. If age is numeric, adds them to a sorted set by age for proximity queries.
    */
   static async addUser(
     userId: string,
@@ -74,43 +69,70 @@ export default class VideoCallUserQueue {
     const metaKey = this.metadataKey(userId);
     const EXPIRY_SECONDS = 60 * 5; // 5 minutes
 
-    // Normalize both the user’s own attributes and their preferences
+    // Normalize user’s own attributes
     const country = this.normalizeAttr(userDetails.country);
     const gender = this.normalizeAttr(userDetails.gender);
+
     const age = this.normalizeAttr(userDetails.age);
 
+    // Normalize preferences
     const prefCountry = this.normalizeAttr(filters.country);
     const prefGender = this.normalizeAttr(filters.gender);
     const prefAge = this.normalizeAttr(filters.age);
     const isStrictStr = filters.isStrict ? "true" : "false";
 
-    // 1) Store metadata and set expire
-    // 2) Add userId to the global waiting set
-    await client
-      .multi()
-      .hSet(metaKey, {
-        country,
-        gender,
-        age,
-        pref_country: prefCountry,
-        pref_gender: prefGender,
-        pref_age: prefAge,
-        isStrict: isStrictStr,
-      })
-      .expire(metaKey, EXPIRY_SECONDS)
-      .sAdd("waiting:all", userId)
-      .exec();
+    const pipeline = videoClient.multi();
 
-    // 3) Add user to attribute-specific sets (unless they are "any").
+    // 1) Store metadata, set expiry, add to global waiting set
+    pipeline.hSet(metaKey, {
+      country,
+      gender,
+      age,
+      pref_country: prefCountry,
+      pref_gender: prefGender,
+      pref_age: prefAge,
+      isStrict: isStrictStr,
+    });
+    pipeline.expire(metaKey, EXPIRY_SECONDS);
+    pipeline.sAdd("waiting:all", userId);
+
+    // 2) Add to single‐attribute sets if not "any"
     if (country !== "any") {
-      await client.sAdd(`waiting:country:${country}`, userId);
+      pipeline.sAdd(`waiting:country:${country}`, userId);
     }
     if (gender !== "any") {
-      await client.sAdd(`waiting:gender:${gender}`, userId);
+      pipeline.sAdd(`waiting:gender:${gender}`, userId);
     }
     if (age !== "any") {
-      await client.sAdd(`waiting:age:${age}`, userId);
+      pipeline.sAdd(`waiting:age:${age}`, userId);
     }
+
+    // 3) Add to compound sets (pairs + triple) based on own attributes
+    if (country !== "any" && gender !== "any") {
+      pipeline.sAdd(`waiting:combo:country:${country}:gender:${gender}`, userId);
+    }
+    if (country !== "any" && age !== "any") {
+      pipeline.sAdd(`waiting:combo:country:${country}:age:${age}`, userId);
+    }
+    if (gender !== "any" && age !== "any") {
+      pipeline.sAdd(`waiting:combo:gender:${gender}:age:${age}`, userId);
+    }
+    if (country !== "any" && gender !== "any" && age !== "any") {
+      pipeline.sAdd(
+        `waiting:combo:country:${country}:gender:${gender}:age:${age}`,
+        userId
+      );
+    }
+
+    // 4) If age is numeric, add to sorted set for age-based queries
+    const ageNum = parseInt(age, 10);
+    if (!isNaN(ageNum)) {
+      pipeline.zAdd("waiting:age_sorted", { score: ageNum, value: userId });
+    }
+
+    await pipeline.exec();
+    console.log("added the user ");
+
   }
 
   /**
@@ -121,25 +143,55 @@ export default class VideoCallUserQueue {
     if (!userId) return;
 
     const metaKey = this.metadataKey(userId);
-    const raw = await client.hGetAll(metaKey);
+    const raw = await videoClient.hGetAll(metaKey);
     const meta = this.normalize(raw);
 
-    // Remove from global set
-    await client.sRem("waiting:all", userId);
+    const pipeline = videoClient.multi();
 
-    // Remove from attribute-specific sets (only if not "any")
+    // Remove from global set
+    pipeline.sRem("waiting:all", userId);
+
+    // Remove from single‐attribute sets if not "any"
     if (meta.country !== "any") {
-      await client.sRem(`waiting:country:${meta.country}`, userId);
+      pipeline.sRem(`waiting:country:${meta.country}`, userId);
     }
     if (meta.gender !== "any") {
-      await client.sRem(`waiting:gender:${meta.gender}`, userId);
+      pipeline.sRem(`waiting:gender:${meta.gender}`, userId);
     }
     if (meta.age !== "any") {
-      await client.sRem(`waiting:age:${meta.age}`, userId);
+      pipeline.sRem(`waiting:age:${meta.age}`, userId);
     }
 
-    // Finally, delete their metadata hash
-    await client.del(metaKey);
+    // Remove from compound sets
+    if (meta.country !== "any" && meta.gender !== "any") {
+      pipeline.sRem(
+        `waiting:combo:country:${meta.country}:gender:${meta.gender}`,
+        userId
+      );
+    }
+    if (meta.country !== "any" && meta.age !== "any") {
+      pipeline.sRem(`waiting:combo:country:${meta.country}:age:${meta.age}`, userId);
+    }
+    if (meta.gender !== "any" && meta.age !== "any") {
+      pipeline.sRem(`waiting:combo:gender:${meta.gender}:age:${meta.age}`, userId);
+    }
+    if (meta.country !== "any" && meta.gender !== "any" && meta.age !== "any") {
+      pipeline.sRem(
+        `waiting:combo:country:${meta.country}:gender:${meta.gender}:age:${meta.age}`,
+        userId
+      );
+    }
+
+    // Remove from sorted set if age numeric
+    const ageNum = parseInt(meta.age, 10);
+    if (!isNaN(ageNum)) {
+      pipeline.zRem("waiting:age_sorted", userId);
+    }
+
+    // Delete metadata hash
+    pipeline.del(metaKey);
+
+    await pipeline.exec();
   }
 
   // ───────────────────────────
@@ -148,58 +200,98 @@ export default class VideoCallUserQueue {
 
   /**
    * Atomically remove a user (candidateId) from all waiting sets and delete their metadata.
-   * Returns true if the metadata still existed (i.e., the user was actually waiting),
+   * Returns true if the metadata still existed (the user was actually waiting),
    * and false if the metadata had already expired or been removed.
    *
-   * This is used to “reserve” a candidate just before actually matching them,
-   * to prevent race-conditions where two different callers match the same candidate.
+   * Used to “reserve” a candidate just before matching, preventing races.
    */
   static async reserveMatch(candidateId: string): Promise<boolean> {
+
     const metaKey = this.metadataKey(candidateId);
 
-    // 1) Check if the user’s metadata still exists
-    const exists = await client.exists(metaKey);
+
+    // 1) Check existence
+    const exists = await videoClient.exists(metaKey);
     if (!exists) {
       return false; // Already expired or removed
     }
 
-    // 2) Read their metadata so we know which attribute sets to remove from
-    const raw = await client.hGetAll(metaKey);
+    // 2) Read metadata
+    const raw = await videoClient.hGetAll(metaKey);
     const meta = this.normalize(raw);
 
-    // 3) Atomically remove from all sets + delete metadata
-    await client
-      .multi()
-      .sRem("waiting:all", candidateId)
-      .sRem(`waiting:country:${meta.country}`, candidateId)
-      .sRem(`waiting:gender:${meta.gender}`, candidateId)
-      .sRem(`waiting:age:${meta.age}`, candidateId)
-      .del(metaKey)
-      .exec();
+    const pipeline = videoClient.multi();
 
+    // 3) Remove from global sets
+    pipeline.sRem("waiting:all", candidateId);
+    if (meta.country !== "any") {
+      pipeline.sRem(`waiting:country:${meta.country}`, candidateId);
+    }
+    if (meta.gender !== "any") {
+      pipeline.sRem(`waiting:gender:${meta.gender}`, candidateId);
+    }
+    if (meta.age !== "any") {
+      pipeline.sRem(`waiting:age:${meta.age}`, candidateId);
+    }
+
+    // 4) Remove from compound sets
+    if (meta.country !== "any" && meta.gender !== "any") {
+      pipeline.sRem(
+        `waiting:combo:country:${meta.country}:gender:${meta.gender}`,
+        candidateId
+      );
+    }
+    if (meta.country !== "any" && meta.age !== "any") {
+      pipeline.sRem(`waiting:combo:country:${meta.country}:age:${meta.age}`, candidateId);
+    }
+    if (meta.gender !== "any" && meta.age !== "any") {
+      pipeline.sRem(`waiting:combo:gender:${meta.gender}:age:${meta.age}`, candidateId);
+    }
+    if (meta.country !== "any" && meta.gender !== "any" && meta.age !== "any") {
+      pipeline.sRem(
+        `waiting:combo:country:${meta.country}:gender:${meta.gender}:age:${meta.age}`,
+        candidateId
+      );
+    }
+
+    // 5) Remove from sorted set if age numeric
+    const ageNum = parseInt(meta.age, 10);
+    if (!isNaN(ageNum)) {
+      pipeline.zRem("waiting:age_sorted", candidateId);
+    }
+
+    // 6) Delete metadata hash
+    pipeline.del(metaKey);
+
+    await pipeline.exec();
     return true;
   }
 
   /**
    * Core matching entry point.
    *
-   * 1) Loads the caller’s metadata (attributes + preferences).
-   * 2) Builds a list of “filtered candidates” via Redis set intersection.
-   * 3) Tries strict matching first (if isStrict=true).
-   * 4) If strict fails (or not strict), tries progressive partial-match tiers:
-   *    a) Two-attribute combinations
-   *    b) Single-attribute combinations
-   * 5) Finally, falls back to the full “everyone waiting” random match.
+   * 1) Loads caller’s metadata (attributes + preferences).
+   * 2) Tries strict matching via a direct compound‐set lookup.
+   * 3) If strict fails (or not strict), tries two‐attribute compound sets.
+   * 4) If that fails, tries single‐attribute sets.
+   * 5) Finally, falls back to age‐proximity via a sorted set or a random pick.
+   * 6) Upon matching, reserves both users and publishes a KAFKA producer for the caller.
    *
-   * Returns the matched userId, or null if no one is available.
+   * Returns matched userId, or null if none available.
    */
   static async findMatch(userId: string): Promise<string | null> {
     if (!userId) {
       throw new Error("findMatch: userId is required");
     }
 
+
+
     // 1) Load caller’s metadata
-    const rawCaller = await client.hGetAll(this.metadataKey(userId));
+    const rawCaller = await videoClient.hGetAll(this.metadataKey(userId));
+    if (Object.keys(rawCaller).length === 0) {
+      // Already expired or removed
+      return null;
+    }
     const caller = this.normalize(rawCaller);
 
     const callerPrefs = {
@@ -214,385 +306,276 @@ export default class VideoCallUserQueue {
       age: caller.age,
     };
 
-    // 2) Build Redis keys array based on caller’s preferences (for set-intersection)
-    const prefKeys: string[] = ["waiting:all"];
-    if (callerPrefs.country !== "any") {
-      prefKeys.push(`waiting:country:${callerPrefs.country}`);
-    }
-    if (callerPrefs.gender !== "any") {
-      prefKeys.push(`waiting:gender:${callerPrefs.gender}`);
-    }
-    if (callerPrefs.age !== "any") {
-      prefKeys.push(`waiting:age:${callerPrefs.age}`);
+    // 1.1) Now “reserve” the caller so they won’t be matched by someone else
+    const callerReserved = await this.reserveMatch(userId);
+    if (!callerReserved) {
+      // If this ever returns false, it means the hash vanished in the meantime
+      return null;
     }
 
-    // 3) Intersect sets to get “strictly filtered” candidates, then remove callerId
-    let candidates: string[] =
-      prefKeys.length === 1
-        ? await client.sMembers(prefKeys[0])
-        : await client.sInter(prefKeys);
-    candidates = candidates.filter((id) => id !== userId);
+    // Helper: Once we pick a candidateId, reserve both sides and publish events
+    const finalizeMatch = async (candId: string): Promise<string> => {
+      try {
+        await this.reserveMatch(userId);
+        await this.reserveMatch(candId);
 
-    // 4) If strict mode is on, attempt mutual strict match
-    if (callerPrefs.isStrict) {
-      const strictMatchId = await this.findMutualStrictMatch(
-        userId,
-        candidates,
-        callerPrefs,
-        callerAttrs
-      );
-      if (strictMatchId) {
-        return strictMatchId;
+        // send Message to the caller only caller through the kafka
+        await sendMessage("match-user", {
+          callerId: userId,
+          calleeId: candId,
+          isCaller: true,
+        });
+
+        return candId;
+      } catch (error) {
+        throw error;
       }
-      // If strict‐only is enforced, we now move on to **partial** match tiers
-      // rather than bail out immediately.
-    }
+    };
 
-    // 5) Progressive partial‐match tiers (only if not already matched strictly)
+    // ───────────────────────────────────────────────────
+    // 2) Strict Match via triple‐combo if all prefs concrete
+    // ───────────────────────────────────────────────────
+    if (
+      callerPrefs.country !== "any" &&
+      callerPrefs.gender !== "any" &&
+      callerPrefs.age !== "any"
+    ) {
 
-    // 5a) Two‐attribute combinations
-    const twoAttrMatch = await this.findTwoAttributeMatch(
-      userId,
-      callerPrefs,
-      callerAttrs
-    );
-    if (twoAttrMatch) {
-      return twoAttrMatch;
-    }
+      const keyTriple = `waiting:combo:country:${callerPrefs.country}:gender:${callerPrefs.gender}:age:${callerPrefs.age}`;
+      let candidates = await videoClient.sMembers(keyTriple);
+      candidates = candidates.filter((id) => id !== userId);
 
-    // 5b) Single‐attribute combinations
-    const oneAttrMatch = await this.findSingleAttributeMatch(
-      userId,
-      callerPrefs,
-      callerAttrs
-    );
+      if (candidates.length > 0) {
+        // Pipeline: fetch metadata for all strict‐candidates
+        const pipeline = videoClient.multi();
+        for (const cid of candidates) {
+          pipeline.hGetAll(this.metadataKey(cid));
+        }
+        // TS‐safe cast: pipeline.exec() → unknown → desired tuple type[]
+        const rawResults: any[] = await pipeline.exec()
+        for (let i = 0; i < candidates.length; i++) {
+          const candId = candidates[i];
+          const rawCand = rawResults[i];
+          const candMeta = this.normalize(rawCand);
 
-    if (oneAttrMatch) {
-      return oneAttrMatch;
-    }
+          const candPrefs = {
+            country: candMeta.pref_country,
+            gender: candMeta.pref_gender,
+            age: candMeta.pref_age,
+            isStrict: candMeta.isStrict === "true",
+          };
+          const candAttrs = {
+            country: candMeta.country,
+            gender: candMeta.gender,
+            age: candMeta.age,
+          };
 
-    // 6) Finally, full “everyone waiting” fallback (random / age‐closest)
-    const fallbackId = await this.looseFallbackAll(
-      userId,
-      callerPrefs,
-      callerAttrs
-    );
-    return fallbackId;
-  }
+          // Both sides must match exactly all three fields
+          const mutualStrict =
+            callerPrefs.country === candAttrs.country &&
+            callerPrefs.gender === candAttrs.gender &&
+            callerPrefs.age === candAttrs.age &&
+            candPrefs.country === callerAttrs.country &&
+            candPrefs.gender === callerAttrs.gender &&
+            candPrefs.age === callerAttrs.age;
 
-  // ───────────────────────────────────────────────────
-  // Private: Strict Matching Logic
-  // ───────────────────────────────────────────────────
-
-  /**
-   * Among the given `candidates`, find one that satisfies mutual strict preferences.
-   * 
-   * Steps:
-   *  1. For each candidateId, load their metadata (attributes + prefs).
-   *  2. Check mutual strict match on all three fields.
-   *  3. If both sides match, reserve that candidate and return.
-   * If none qualify, return null.
-   */
-  private static async findMutualStrictMatch(
-    callerId: string,
-    candidates: string[],
-    callerPrefs: {
-      country: string;
-      gender: string;
-      age: string;
-      isStrict: boolean;
-    },
-    callerAttrs: {
-      country: string;
-      gender: string;
-      age: string;
-    }
-  ): Promise<string | null> {
-    for (const candidateId of candidates) {
-      // Load candidate’s metadata
-      const rawCand = await client.hGetAll(this.metadataKey(candidateId));
-      const candMeta = this.normalize(rawCand);
-
-      const candPrefs = {
-        country: candMeta.pref_country,
-        gender: candMeta.pref_gender,
-        age: candMeta.pref_age,
-        isStrict: candMeta.isStrict === "true",
-      };
-      const candAttrs = {
-        country: candMeta.country,
-        gender: candMeta.gender,
-        age: candMeta.age,
-      };
-
-      // Mutual strict match: all three fields must match exactly if either side demands strict or cares about age
-      const callerMatchesCand = this.matchesStrict(callerPrefs, candAttrs);
-      const candMatchesCaller = this.matchesStrict(candPrefs, callerAttrs);
-
-      if (callerMatchesCand && candMatchesCaller) {
-        const reserved = await this.reserveMatch(candidateId);
-        if (reserved) {
-          return candidateId;
+          if (mutualStrict) {
+            return finalizeMatch(candId);
+          }
         }
       }
     }
-    return null;
-  }
 
-  /**
-   * Checks strict filter logic:
-   *  - If isStrict OR age preference is concrete (not "any"), then require all three to match exactly.
-   *  - Otherwise, allow any‐or‐exact for each field.
-   */
-  private static matchesStrict(
-    prefs: { country: string; gender: string; age: string; isStrict: boolean },
-    attrs: { country: string; gender: string; age: string }
-  ): boolean {
-    if (prefs.isStrict || prefs.age !== "any") {
-      // All three must match exactly
-      return (
-        prefs.country === attrs.country &&
-        prefs.gender === attrs.gender &&
-        prefs.age === attrs.age
-      );
-    }
-
-    // Otherwise “any” acts as wildcard
-    return (
-      (prefs.country === "any" || prefs.country === attrs.country) &&
-      (prefs.gender === "any" || prefs.gender === attrs.gender) &&
-      (prefs.age === "any" || prefs.age === attrs.age)
-    );
-  }
-
-  // ───────────────────────────────────────────────────
-  // Private: Two‐Attribute Partial Matching
-  // ───────────────────────────────────────────────────
-
-  /**
-   * Attempt to find any candidate who matches two attributes (“pair match”),
-   * in this priority order:
-   *   1. country + gender
-   *   2. country + age
-   *   3. gender + age
-   *
-   * For each pair, we:
-   *  1. Build Redis keys for the caller’s two preferences (if not "any").
-   *  2. Intersect those sets, filter out callerId, then check mutual compatibility
-   *     (i.e. candidate’s preferences shouldn’t contradict).
-   *  3. If found, reserveMatch() on that candidate and return their ID. Otherwise, move on.
-   */
-  private static async findTwoAttributeMatch(
-    callerId: string,
-    callerPrefs: { country: string; gender: string; age: string; isStrict: boolean },
-    callerAttrs: { country: string; gender: string; age: string }
-  ): Promise<string | null> {
-    // Define the three two-attribute tiers:
-    const tiers: Array<["country" | "gender" | "age", "country" | "gender" | "age"]> = [
+    // If caller isStrict but we didn’t find a strict triple match, proceed to partial
+    // ───────────────────────────────────────────────────
+    // 3) Two‐Attribute Partial Match via compound sets
+    // ───────────────────────────────────────────────────
+    const twoAttrTiers: Array<["country" | "gender" | "age", "country" | "gender" | "age"]> = [
       ["country", "gender"],
       ["country", "age"],
       ["gender", "age"],
     ];
+    for (const [attrA, attrB] of twoAttrTiers) {
 
-    for (const [attrA, attrB] of tiers) {
       const prefA = callerPrefs[attrA];
       const prefB = callerPrefs[attrB];
+
       if (prefA === "any" || prefB === "any") {
-        // If caller didn’t specify both of these preferences, skip this tier
         continue;
       }
 
-      // Build Redis keys: waiting:attrA:<prefA> ∩ waiting:attrB:<prefB>
-      const keyA = `waiting:${attrA}:${prefA}`;
-      const keyB = `waiting:${attrB}:${prefB}`;
+      // Build the compound key for those two prefs
+      const keyPair = `waiting:combo:${attrA}:${prefA}:${attrB}:${prefB}`;
+      let candidates = await videoClient.sMembers(keyPair);
 
-      let candidates: string[] = [];
-      try {
-        candidates = await client.sInter([keyA, keyB]);
-      } catch {
-        candidates = [];
-      }
-      // Exclude caller
-      candidates = candidates.filter((id) => id !== callerId);
+      candidates = candidates.filter((id) => id !== userId);
       if (candidates.length === 0) {
         continue;
       }
 
-      // Check each candidate for mutual compatibility on these two fields
+      // Pipeline: fetch metadata for all candidates in this tier
+      const pipeline = videoClient.multi();
       for (const candId of candidates) {
-        // Load candidate metadata
-        const rawCand = await client.hGetAll(this.metadataKey(candId));
+        pipeline.hGetAll(this.metadataKey(candId));
+      }
+      const rawResults: any[] = await pipeline.exec();
+
+      for (let i = 0; i < candidates.length; i++) {
+        const candId = candidates[i];
+        const rawCand = rawResults[i];
         const candMeta = this.normalize(rawCand);
 
-        // Candidate’s own preferences:
         const candPrefs = {
           country: candMeta.pref_country,
           gender: candMeta.pref_gender,
           age: candMeta.pref_age,
           isStrict: candMeta.isStrict === "true",
         };
-
-        // Candidate’s attributes:
         const candAttrs = {
           country: candMeta.country,
           gender: candMeta.gender,
           age: candMeta.age,
         };
 
-        // We only need to check that candidate’s preferences do not contradict
-        // these two fields. In other words, candidatePrefs[attrA] must be
-        // either “any” or exactly callerAttrs[attrA], and same for attrB.
-
-        const candPrefA = candPrefs[attrA];
-        const candPrefB = candPrefs[attrB];
-        const callerAttrA = callerAttrs[attrA];
-        const callerAttrB = callerAttrs[attrB];
-
-        const mutualA = candPrefA === "any" || candPrefA === callerAttrA;
-        const mutualB = candPrefB === "any" || candPrefB === callerAttrB;
-
+        // Check mutual compatibility on these two fields:
+        const mutualA = candPrefs[attrA] === "any" || candPrefs[attrA] === callerAttrs[attrA];
+        const mutualB = candPrefs[attrB] === "any" || candPrefs[attrB] === callerAttrs[attrB];
         if (!mutualA || !mutualB) {
           continue;
         }
 
-        // If mutual compatibility stands, reserve and return
-        const reserved = await this.reserveMatch(candId);
-        if (reserved) {
-          return candId;
-        }
+        return finalizeMatch(candId);
       }
-      // If no one in this tier worked out, move to the next pair of attributes
     }
 
-    return null;
-  }
+    // ───────────────────────────────────────────────────
+    // 4) Single‐Attribute Partial Match
+    // ───────────────────────────────────────────────────
 
-  // ───────────────────────────────────────────────────
-  // Private: Single‐Attribute Partial Matching
-  // ───────────────────────────────────────────────────
 
-  /**
-   * Attempt to find any candidate who matches exactly one attribute,
-   * in this priority order:
-   *   1. country
-   *   2. gender
-   *   3. age
-   *
-   * For each attribute:
-   *  1. If caller’s preference on that attribute ≠ "any", intersect waiting:<attr>:<pref>
-   *  2. Exclude callerId and check that candidate’s preference on that attribute
-   *     is “any” or matches caller’s attribute.
-   *  3. If found, reserveMatch() on that candidate and return their ID.
-   */
-  private static async findSingleAttributeMatch(
-    callerId: string,
-    callerPrefs: { country: string; gender: string; age: string; isStrict: boolean },
-    callerAttrs: { country: string; gender: string; age: string }
-  ): Promise<string | null> {
     const singleTiers: Array<"country" | "gender" | "age"> = ["country", "gender", "age"];
-
     for (const attr of singleTiers) {
-      const prefValue = callerPrefs[attr];
+      const prefValue = callerPrefs[attr]; // Prefer value by the caller
       if (prefValue === "any") {
-        continue; // Caller doesn’t care about this attribute
+        continue;
       }
 
-      // Look up waiting set for exactly that preference
-      const key = `waiting:${attr}:${prefValue}`;
-      let candidates: string[] = [];
-      try {
-        candidates = await client.sMembers(key);
-      } catch {
-        candidates = [];
-      }
-      // Exclude caller
-      candidates = candidates.filter((id) => id !== callerId);
+
+      const keySingle = `waiting:${attr}:${prefValue}`;
+      let candidates = await videoClient.sMembers(keySingle);
+
+
+
+
+      candidates = candidates.filter((id) => id !== userId); // User own from the list
       if (candidates.length === 0) {
         continue;
       }
 
-      // For each candidate, check that their preference on THIS attribute
-      // is “any” or exactly matches callerAttrs[attr].
+      // Pipeline: fetch metadata for all candidates in this tier
+      const pipeline = videoClient.multi();
       for (const candId of candidates) {
-        const rawCand = await client.hGetAll(this.metadataKey(candId));
+        pipeline.hGetAll(this.metadataKey(candId));
+      }
+
+
+
+
+      const rawResults: any[] = await pipeline.exec();
+
+      for (let i = 0; i < candidates.length; i++) {
+        const candId = candidates[i];
+
+
+        // rawResults[i] is an array like [ { ...metadata... } ]
+        const rawCand = rawResults[i];  // extract the user metadata object
+
+
+
         const candMeta = this.normalize(rawCand);
 
-        const candPref = candMeta[`pref_${attr}`]; // “pref_country”, “pref_gender” or “pref_age”
+        const candPref = candMeta[`pref_${attr}`]; // e.g. "pref_country"
+
         const callerAttr = callerAttrs[attr];
 
         if (candPref !== "any" && candPref !== callerAttr) {
           continue;
         }
 
-        // We’ve found a candidate who matches on this single attribute,
-        // and who isn’t too picky on that same attribute.
-        const reserved = await this.reserveMatch(candId);
-        if (reserved) {
-          return candId;
-        }
+
+        return finalizeMatch(candId);
       }
-      // If none in this single‐attribute tier worked out, keep going
+
+
+
     }
 
-    return null;
-  }
+    // ───────────────────────────────────────────────────
+    // 5) Fallback: Age‐Proximity via Sorted Set or Random
+    // ───────────────────────────────────────────────────
+    // Remove caller from waiting:all to avoid picking self
+    await videoClient.sRem("waiting:all", userId);
 
-  // ───────────────────────────────────────────────────
-  // Private: Full “Everyone Waiting” Fallback
-  // ───────────────────────────────────────────────────
-
-  /**
-   * If no one in the previous tiers matched, attempt a broader "everyone waiting" fallback.
-   * 1. Get full "waiting:all" (minus caller).
-   * 2. If caller has an age preference, find the closest‐age waiting user, reserve, and return.
-   * 3. Otherwise, pick a random waiting user, reserve, and return.
-   * 4. If no one’s left, return null.
-   */
-  private static async looseFallbackAll(
-    callerId: string,
-    callerPrefs: { country: string; gender: string; age: string; isStrict: boolean },
-    callerAttrs: { country: string; gender: string; age: string }
-  ): Promise<string | null> {
-    // 1) Load everyone currently waiting
-    let allWaiting = await client.sMembers("waiting:all");
-    allWaiting = allWaiting.filter((id) => id !== callerId);
-
-    if (allWaiting.length === 0) {
-      return null;
-    }
-
-    // 2) If caller has an age preference, try closest‐age match
     if (callerPrefs.age !== "any") {
       const callerAgeNum = parseInt(callerAttrs.age, 10);
       if (!isNaN(callerAgeNum)) {
-        const diffs: { id: string; diff: number }[] = [];
-        for (const candId of allWaiting) {
-          const raw = await client.hGetAll(this.metadataKey(candId));
-          const meta = this.normalize(raw);
-          const candAgeNum = parseInt(meta.age, 10);
-          if (!isNaN(candAgeNum)) {
-            diffs.push({ id: candId, diff: Math.abs(callerAgeNum - candAgeNum) });
+        const windowSize = 5; // years
+        const minScore = callerAgeNum - windowSize - 2;
+        const maxScore = callerAgeNum + windowSize;
+        const nearbyIds = await videoClient.zRangeByScore(
+          "waiting:age_sorted",
+          minScore,
+          maxScore
+        );
+
+
+
+        const candidates = nearbyIds.filter((id) => id !== userId);
+
+        if (candidates.length > 0) {
+          // Pipeline: fetch metadata
+          const pipeline = videoClient.multi();
+          for (const cid of candidates) {
+            pipeline.hGetAll(this.metadataKey(cid));
           }
-        }
-        if (diffs.length > 0) {
-          const minDiff = Math.min(...diffs.map((d) => d.diff));
-          const closestIds = diffs.filter((d) => d.diff === minDiff).map((d) => d.id);
-          const pick = closestIds[Math.floor(Math.random() * closestIds.length)];
-          const reserved = await this.reserveMatch(pick);
-          if (reserved) {
-            return pick;
+          const rawResults: any[] = await pipeline.exec();
+
+
+          let bestId: string | null = null;
+          let bestDiff = Infinity;
+          for (let i = 0; i < candidates.length; i++) {
+            const cid = candidates[i];
+            const rawCand = rawResults[i];
+            const meta = this.normalize(rawCand);
+            const candAgeNum = parseInt(meta.age, 10);
+            if (isNaN(candAgeNum)) continue;
+            const diff = Math.abs(callerAgeNum - candAgeNum);
+            if (diff < bestDiff) {
+              bestDiff = diff;
+              bestId = cid;
+            }
+          }
+
+          if (bestId) {
+            return finalizeMatch(bestId);
           }
         }
       }
     }
 
-    // 3) Otherwise, random pick
-    const randomPick = allWaiting[Math.floor(Math.random() * allWaiting.length)];
-    const reserved = await this.reserveMatch(randomPick);
-    if (reserved) {
-      return randomPick;
+    // 6) Random fallback
+    const allWaiting = await videoClient.sMembers("waiting:all");
+    const others = allWaiting.filter((id) => id !== userId);
+
+    if (others.length === 0) {
+      return null; // no one else to match
     }
 
+    const randomIndex = Math.floor(Math.random() * others.length);
+    const randomPick = others[randomIndex];
+    return finalizeMatch(randomPick);
+
+    // No match found
     return null;
   }
 }

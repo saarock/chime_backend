@@ -14,7 +14,12 @@ class VideoCallSocketByUserQueue {
     await Promise.all([
       client.set(`videoSocket:${userId}`, socket.id),
       client.sAdd(VideoCallSocketByUserQueue.redisKey, userId),
+
+
     ]);
+    // console.log("set");
+    console.log(socket.id + ": set");
+
   }
 
   /**
@@ -37,11 +42,12 @@ class VideoCallSocketByUserQueue {
   /**
    * Remove socket ID and user from online set.
    */
-  public async delete(userId: string): Promise<void> {
+  public async delete(userId: string): Promise<void> {    
     await Promise.all([
       client.del(`videoSocket:${userId}`),
       client.sRem(VideoCallSocketByUserQueue.redisKey, userId),
     ]);
+
   }
 
   /**

@@ -19,7 +19,7 @@ export const socketAuthMiddleware = (
   }
 
   try {
-    const decoded = jwt.verify(token, ACCESS_TOKEN_SECRET) as jwt.JwtPayload;
+    const decoded = jwt.verify(token, ACCESS_TOKEN_SECRET) as jwt.JwtPayload;    
     socket.data.user = decoded;
     next();
   } catch (err: any) {

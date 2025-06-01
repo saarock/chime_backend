@@ -61,3 +61,11 @@ export interface UserImpDetails {
   gender: string;
   userId: string;
 }
+
+
+// User call logs
+export interface UserCallLogs {
+  callerId: string;
+  calleeId: string;
+  callTime: string; // duration in seconds (or you can use milliseconds if preferred)
+}
