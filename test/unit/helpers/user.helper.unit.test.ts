@@ -1,60 +1,85 @@
-// import { describe, it, expect, vi } from "vitest";
-// import userHelper from "../../../src/helpers/user.helper";
-// import { ApiError } from "../../../src/utils/index.js";
-// import * as jwt from "jsonwebtoken"; // Use named import for mocking
+// Import all the necessar dependencies here
+import { describe, it, expect, vi, beforeEach, afterAll, beforeAll } from "vitest";
+import userHelper from "../../../src/helpers/user.helper";
+import { client } from "../../../src/configs/redis.js";
+import { MongoMemoryServer } from 'mongodb-memory-server';
+import mongoose from 'mongoose';
+import User from "../../../src/models/User.model.js";
+import type { User as userTypes } from "../../../src/types/index.js";
 
-// // Mock jwt.verify specifically
-// vi.mock("jsonwebtoken", () => ({
-//   verify: vi.fn(), // Mock only the verify method
-// }));
 
-// describe("User service test", () => {
-//   it("should throw ApiError with statusCode 400 if refreshToken is empty", () => {
-//     try {
-//       userHelper.verifyRefreshToken(""); // Pass an empty token
-//     } catch (error: any) {
-//       expect(error).toBeInstanceOf(ApiError); // Expect an ApiError
-//       expect(error.statusCode).toBe(400); // Expect statusCode 400
-//       expect(error.message).toBe("Secret key not found"); // Check the message
-//     }
-//   });
+let mongoServer: MongoMemoryServer;
+beforeEach(async () => {
+    if (!client.isOpen) {
+        await client.connect();
+    }
+    await client.flushAll();
+    process.env.ACCESS_TOKEN_SECRET = "testaccesstokensecret";
+    process.env.REFRESH_TOKEN_SECRET = "testrefreshtokensecret";
+    process.env.REFRESH_TOKEN_EXPIRY = "7d";
+    process.env.ACCESS_TOKEN_EXPIRY = "15m"
 
-//   it("should return jwt payload after verifying the jwt token", async () => {
-//     const mockPayload = { _id: "456" }; // The mock JWT payload
+});
 
-//     // Mock jwt.verify to simulate behavior for valid/expired token
-//     (jwt.verify as any).mockImplementation(
-//       (token: string, secret: string, callback) => {
-//         console.log("Mock verify called with token:", token);
-//         console.log("Secret used:", secret);
+beforeAll(async () => {
+    mongoServer = await MongoMemoryServer.create();
+    const uri = mongoServer.getUri();
+    await mongoose.connect(uri);
+});
 
-//         if (token === "456" && secret === process.env.REFRESH_TOKEN_SECRET) {
-//           // Simulate success by calling the callback with null error and mock payload
-//           console.log("Token verified successfully");
-//           callback(null, mockPayload);
-//         } else {
-//           // Simulate failure (expired or invalid token) by calling the callback with an error
-//           console.log("Token verification failed");
-//           callback(new Error("Refresh Token invalid or expired"), null);
-//         }
-//       },
-//     );
+afterAll(async () => {
+    await client.quit();
+    await mongoose.disconnect();
+    await mongoServer.stop();
+})
 
-//     // Mock verifyRefreshToken directly
-//     vi.spyOn(userHelper, "verifyRefreshToken").mockResolvedValue(mockPayload);
 
-//     process.env.REFRESH_TOKEN_SECRET = "secretKeyForTesting"; // Set secret
-//     const token = "456"; // The token to verify
+describe("User service test", () => {
+    it("should cache the data in the redis without any error ", async () => {
+        const key = "fasdfgasdgasdg"
+        const data = { fullName: "Aayush Banset", userName: "saarock" }
+        await userHelper.cacheTheUserDataById(key, JSON.stringify(data));
+    });
 
-//     // Make sure to await the method if it's async
-//     try {
-//       const result = await userHelper.verifyRefreshToken(token); // Ensure async handling
-//       console.log("Verification result:", result);
+    it("should add the data in the redis for cache and get the cache data from the redis without any errors ", async () => {
+        const key = "fasdfgasdgasdg"
+        const data = { fullName: "Aayush Banset", userName: "saarocl" }
+        await userHelper.cacheTheUserDataById(key, JSON.stringify(data));
+        const cacheRedisData = await userHelper.getUserRedisCacheData(key);
+        expect(cacheRedisData).toEqual(data);
+    });
 
-//       // Check that the result matches the mock payload
-//       expect(result).toMatchObject(mockPayload);
-//     } catch (error) {
-//       console.error("Error during verification:", error);
-//     }
-//   });
-// });
+    it("should generate the access and refresh token and cache in the redis", async () => {
+        const userId = "fasdngjsdbgahsdgbsdg";
+        const data = { fullName: "Aayush Banset", userName: "saarock" }
+
+        const user = await User.create({
+            fullName: "Aayush Basnet",
+            email: "saarock4646@gmail.com",
+        });
+
+
+        const userFullData = await User.findById(user._id).lean<userTypes>();
+        if (!userFullData || !userFullData._id) return;
+        const { refreshToken, accessToken } = await userHelper.generateAccessAndRefreshTokensAndCacheTheUserDataInRedis(userFullData._id, userFullData);
+        // Assert
+        expect(typeof accessToken).toBe("string");
+        expect(typeof refreshToken).toBe("string");
+        expect(accessToken.length).toBeGreaterThan(10);
+        expect(refreshToken.length).toBeGreaterThan(10);
+
+        const redisUserCache = await userHelper.getUserRedisCacheData(user._id);
+
+        console.log(redisUserCache);
+
+        expect(redisUserCache).toMatchObject({
+            fullName: 'Aayush Basnet',
+            email: 'saarock4646@gmail.com',
+            active: true,
+            role: 'user'
+        });
+
+});
+
+
+});

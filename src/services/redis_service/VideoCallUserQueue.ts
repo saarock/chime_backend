@@ -203,8 +203,8 @@ export default class VideoCallUserQueue {
    */
   static async removeUser(userId: string): Promise<void> {
     if (!userId) return;
-    const isUserIsAlreadyLock = await redisLock.isUserAlreadyLocked(userId, this.ADDING_LOCK_PREFIX);
-    if (!isUserIsAlreadyLock) return;
+    const isUserIsAlreadyLock = await redisLock.isUserAlreadyLocked(userId, this.ADDING_LOCK_PREFIX);        
+    if (!isUserIsAlreadyLock)  return;
     const isUserLocked = await redisLock.lockUser(userId, this.REMOVING_LOCK_PREFIX);     // Lock the user while removing to prevent from the multiple un-necessary remove which may contains many errors
     if (!isUserLocked) return;
     const metaKey = this.metadataKey(userId);
