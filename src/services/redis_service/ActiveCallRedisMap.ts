@@ -37,8 +37,6 @@ class ActiveCallRedisMap {
     await client.del(`${ACTIVE_CALL_PREFIX}${userB}`);
     await client.del(`${CALL_START_PREFIX}${userA}`);
     await client.del(`${CALL_START_PREFIX}${userB}`);
-
-    console.log("call ended");
     
 
     return {

@@ -9,13 +9,14 @@ describe("ApiError class", () => {
     const success = false;
     const errors = [];
     const stacks = "";
+    const errorCode = "Invalid Token";
 
-    const response = new ApiError(statusCode, message, errors, stacks);
+    const response = new ApiError(statusCode, message, errors, stacks, errorCode);
 
     expect(response.statusCode).toBe(statusCode);
     expect(response.message).toBe(message);
     expect(response.data).toBe(data);
     expect(response.success).toBe(success);
-    expect(response.errors).toBe(errors);
+    expect(response.errors).toEqual(errors);
   });
 });

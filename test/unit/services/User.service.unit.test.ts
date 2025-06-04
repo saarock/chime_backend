@@ -5,15 +5,13 @@ import {
   vi,
   beforeEach,
   beforeAll,
-  afterAll,
 } from "vitest";
-import { userService } from "../../../src/services/index.js";
+import { userService } from "../../../src/services/databaseService/index.js";
 import verifyGoogleToken from "../../../src/utils/verifyGoogleToken.js";
 import User from "../../../src/models/User.model.js";
-import { createClient } from "redis";
 import RedisMock from "ioredis-mock";
 import userHelper from "../../../src/helpers/user.helper.js";
-import ApiError from "../../../src/utils/ApiError.js";
+
 
 vi.mock("../../../src/utils/verifyGoogleToken.js");
 vi.mock("../../../src/models/User.model.js");
@@ -47,7 +45,7 @@ describe("UserService - loginWithGoogle", () => {
     (verifyGoogleToken as any).mockResolvedValue(undefined);
 
     await expect(
-      userService.loginWithGoogle({ credentials: "invalid", clientId: "id" }),
+      userService.loginWithGoogle({ credential: "invalid", clientId: "id" }),
     ).rejects.toMatchObject({
       statusCode: 404,
       message: "Google Payload Not Found",
@@ -58,7 +56,7 @@ describe("UserService - loginWithGoogle", () => {
     (verifyGoogleToken as any).mockResolvedValue({ name: "John Doe" });
 
     await expect(
-      userService.loginWithGoogle({ credentials: "token", clientId: "id" }),
+      userService.loginWithGoogle({ credential: "token", clientId: "id" }),
     ).rejects.toMatchObject({
       statusCode: 404,
       message: "Email is required!",
@@ -69,7 +67,7 @@ describe("UserService - loginWithGoogle", () => {
     (verifyGoogleToken as any).mockResolvedValue({ email: "john@example.com" });
 
     await expect(
-      userService.loginWithGoogle({ credentials: "token", clientId: "id" }),
+      userService.loginWithGoogle({ credential: "token", clientId: "id" }),
     ).rejects.toMatchObject({
       statusCode: 404,
       message: "fulName is required",
@@ -100,7 +98,7 @@ describe("UserService - loginWithGoogle", () => {
     });
 
     await expect(
-      userService.loginWithGoogle({ credentials: "token", clientId: "id" }),
+      userService.loginWithGoogle({ credential: "token", clientId: "id" }),
     ).rejects.toMatchObject({
       statusCode: 400,
       message: "UserDetails not found by ID",
@@ -157,7 +155,7 @@ describe("UserService - loginWithGoogle", () => {
     try {
       // Call the function to test
       const result = await userService.loginWithGoogle({
-        credentials: "token",
+        credential: "token",
         clientId: "id",
       });
 

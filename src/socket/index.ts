@@ -14,13 +14,15 @@ export const initSockets = (httpServer: any) => {
       methods: ["GET", "POST"],
       credentials: true,
     },
+    maxHttpBufferSize: 65536  // 64KB
+
   });
 
   const chatNameSpace = io.of("/chat");
   const videoNameSpace = io.of("/video");
   new ChatSocket(chatNameSpace);
   videoSocket = new VideoSocket(videoNameSpace);
-  console.log("yes");
+
 
   return io;
 };

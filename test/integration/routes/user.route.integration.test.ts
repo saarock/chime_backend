@@ -112,7 +112,7 @@ describe("POST /refresh-tokens", () => {
 });
 
 describe("POST /refresh-tokens", () => {
-  test("should response with 404 status code", async () => {
+  test("should response with 401 status code", async () => {
     const selectMock = vi.fn().mockResolvedValue({
       _id: 123,
       email: "test@example.com",
@@ -128,7 +128,7 @@ describe("POST /refresh-tokens", () => {
       .post("/api/v1/users/refresh-tokens")
       .send({ refreshToken: "mock-refresh-token" });
 
-    expect(response.body.statusCode).toBe(404);
+    expect(response.body.statusCode).toBe(401);
   });
 });
 

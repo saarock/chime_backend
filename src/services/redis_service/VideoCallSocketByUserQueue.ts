@@ -11,6 +11,8 @@ class VideoCallSocketByUserQueue {
     userId: string,
     socket: Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap>,
   ): Promise<void> {
+    console.log("setting...............");
+    
     await Promise.all([
       client.set(`videoSocket:${userId}`, socket.id),
       client.sAdd(VideoCallSocketByUserQueue.redisKey, userId),
@@ -54,6 +56,8 @@ class VideoCallSocketByUserQueue {
    * Get total number of online users.
    */
   public async count(): Promise<number> {
+    console.log(await client.sCard(VideoCallSocketByUserQueue.redisKey));
+    
     return await client.sCard(VideoCallSocketByUserQueue.redisKey);
   }
 
