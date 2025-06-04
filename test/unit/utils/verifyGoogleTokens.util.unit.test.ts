@@ -46,7 +46,7 @@ describe("verifyGoogleToken", () => {
     mockVerifyIdToken.mockResolvedValue(mockTicket);
 
     const result = await verifyGoogleToken({
-      credentials: "fake-token",
+      credential: "fake-token",
       clientId: "env-client-id",
     });
 
@@ -65,7 +65,7 @@ describe("verifyGoogleToken", () => {
     mockVerifyIdToken.mockResolvedValue(mockTicket);
 
     await verifyGoogleToken({
-      credentials: "fake-token",
+      credential: "fake-token",
       clientId: "test-client-id",
     });
 
@@ -83,7 +83,7 @@ describe("verifyGoogleToken", () => {
     mockVerifyIdToken.mockResolvedValue(mockTicket);
 
     const result = await verifyGoogleToken({
-      credentials: "fake-token",
+      credential: "fake-token",
       clientId: "test-client-id",
     });
 
@@ -95,7 +95,7 @@ describe("verifyGoogleToken", () => {
 
     await expect(
       verifyGoogleToken({
-        credentials: "fake-token",
+        credential: "fake-token",
         clientId: "test-client-id",
       }),
     ).rejects.toThrow("Invalid token");

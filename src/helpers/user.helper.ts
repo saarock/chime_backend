@@ -11,7 +11,6 @@ class UserHelper {
       // Cache the user data in Redis (excluding sensitive data)
       await client.set(`user:${key}`, value, {
         EX: 3600,
-        NX: true,
       }); // Cache expires in 1 hour (3600 seconds)
     } catch (error) {
       console.error(`Error caching user data: ${error}`);

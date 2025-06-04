@@ -1,14 +1,15 @@
 // src/services/User.services.ts
 import type { TokenPayload } from "google-auth-library";
-import { User } from "../models/index.js";
+import { User } from "../../models/index.js";
 import type {
   TokenPayloadTypes,
   User as userTypes,
-  UserLoginWithGoogleDetils,
-} from "../types/index.js";
-import verifyGoogleToken from "../utils/verifyGoogleToken.js";
-import ApiError from "../utils/ApiError.js";
-import userHelper from "../helpers/user.helper.js";
+  UserLoginWithGoogleDetails,
+  UserImpDetails,
+} from "../../types/index.js";
+import verifyGoogleToken from "../../utils/verifyGoogleToken.js";
+import ApiError from "../../utils/ApiError.js";
+import userHelper from "../../helpers/user.helper.js";
 
 // UserService class for login, logout, register and other user related things
 class UserService {
@@ -18,7 +19,7 @@ class UserService {
   }
 
   // Main method for login with Google
-  async loginWithGoogle(googleTokens: UserLoginWithGoogleDetils): Promise<{
+  async loginWithGoogle(googleTokens: UserLoginWithGoogleDetails): Promise<{
     userData: userTypes;
     refreshToken: string;
     accessToken: string;
@@ -204,6 +205,61 @@ class UserService {
     } else {
       throw new ApiError(400, "User is already logged out");
     }
+  }
+
+  async addUserImportantDetails(
+    userImportantDetails: UserImpDetails
+  ): Promise<UserImpDetails | null> {
+    // 1. Validate input payload
+    if (!userImportantDetails) {
+      throw new ApiError(400, "Request body is required");
+    }
+    const { userId, age, country, gender } = userImportantDetails;
+    if (!userId) {
+      throw new ApiError(400, "userId is required");
+    }
+    if (age == null) {
+      throw new ApiError(400, "age is required");
+    }
+    if (!country) {
+      throw new ApiError(400, "country is required");
+    }
+    if (!gender) {
+      throw new ApiError(400, "gender is required");
+    }
+
+    // 2. Fetch the user
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new ApiError(404, "User not found");
+    }
+
+    // 3. Apply all updates at once
+    user.age = age;
+    user.country = country;
+    user.gender = gender.toLowerCase();
+    await user.save();
+
+    // 4. Retrieve the updated document (excluding sensitive fields)
+    const updated = await User.findById(userId)
+      .select("-password -refreshToken")
+      .lean<userTypes>();
+    if (!updated) {
+      throw new ApiError(500, "Failed to retrieve updated user data");
+    }
+
+    // 5. Cache it
+    await userHelper.cacheTheUserDataById(userId, JSON.stringify(updated));
+
+
+    // 6. Return just the important details
+    const result: UserImpDetails = {
+      age: Number(updated.age),
+      country: updated.country,
+      gender: updated.gender,
+      userId, // include if your type requires it
+    };
+    return result;
   }
 }
 

@@ -5,7 +5,7 @@ import { createServer } from "http";
 import { type Request, type Response } from "express";
 import { initSockets } from "./socket/index.js";
 
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 8000;
 
 // Import the socket to initialize
 const httpServer = createServer(app);
@@ -18,26 +18,37 @@ app.get("/", (req: Request, res: Response) => {
 });
 
 import { connectMonogoDbDataBase, connectRedis } from "./configs/index.js";
+import { connectProducer } from "./kafka/producer.js";
+import { startMatchConsumer } from "./kafka/consumers/matchConsumer.js";
+import { handleErrors } from "./kafka/consumers/errorConsumer.js";
+import { handleEndCalls } from "./kafka/consumers/callEndConsumer.js";
+
+
+/**
+ * Kafka
+ */
+
+
 
 // Connect to the mongoDb database
 connectMonogoDbDataBase()
   .then(() => {
-    // After connecting to the mongodb database connect to the redis
-    connectRedis()
-      .then(() => {
-        httpServer.listen(port, () => {
-          // ✅ CHANGED THIS LINE!
-          console.log(`Server is running on port ${port}`);
-        });
-      })
-      .catch((error) => {
-        // Handle error if error occurs while connecting to redis
-        console.log(`Error: ${error.message}`);
-        process.exit(1);
-      });
+    return connectRedis();
+  })
+  .then(() => {
+    return Promise.all([
+      connectProducer(),
+      startMatchConsumer(),
+      handleErrors(),
+      handleEndCalls(),
+    ]);
+  })
+  .then(() => {
+    httpServer.listen(port, () => {
+      console.log(`Server is running on port ${port}`);
+    });
   })
   .catch((error) => {
-    // Handle error if error occurs while connecting to mongodb
-    console.log(`Error: ${error.message}`);
+    console.error("Startup error:", error);
     process.exit(1);
   });
