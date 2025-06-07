@@ -1,72 +1,49 @@
-// Import all the necessary dependencies here
+// Import all the necessary dependencies
 import { fisherShuffle } from "../../utils/fisherShuffle.js";
 import { videoClient } from "../../configs/redis.js";
 import { redisLock, RedisLockKeyStore } from "./index.js";
 import type { Filters, UserDetails, UserMetaData } from "../../types/index.js";
 
-
 /**
- * 1. VideoCallUserQueue servive which is responsible for adding the user to the redis accoriding the data types and attribute based indexing
- * 2. Responsible for removing the user from the queue after two user get matched and locked is get success 
- * 3. Responsible for filtering different types of filtering are in use here 
- * 4. Lock mechanism to handle the rance-condition
+ * VideoCallUserQueue Service Responsibilities:
+ * 1. Add user to Redis queue with attribute-based indexing
+ * 2. Remove user after match and successful locking
+ * 3. Apply various filters to find suitable candidates
+ * 4. Implement locking to prevent race conditions
  */
 export default class VideoCallUserQueue {
-
-
-  // ─────────────────────────
-  // Private: Helpers
-  // ─────────────────────────
-
-
-  // VideoCallUserQueue readonly constant variables
+  // Constants
   private static readonly MAX_RETRIES_MULTIPLIER = 5;
   private static readonly VIDEO_CALL_LOCK_PREFIX = "video:call:lock:for:video:call";
   private static readonly ADDING_LOCK_PREFIX = "video:call:user:lock:while:adding";
   private static readonly REMOVING_LOCK_PREFIX = "video:call:user:lock:while:removing";
 
-
-  /** Normalize any string (or null/undefined) into a lowercase, trimmed string; default to "any". */
+  /** Normalize attribute for indexing */
   private static normalizeAttr(attr: string | number | null | undefined): string {
     if (attr === null || attr === undefined) return "any";
     return String(attr).trim().toLowerCase() || "any";
   }
 
-  /** Normalize raw Redis hash object into UserMetaData with proper types */
+  /** Normalize raw Redis hash into UserMetaData */
   private static normalizeObject(rawMeta: Record<string, any>): UserMetaData {
     const meta = Object.fromEntries(Object.entries(rawMeta));
     return {
       country: meta.country || null,
       gender: meta.gender || null,
-      age: meta.age ? Number(meta.age) : null,
-      pref_country: meta.pref_country || "any",
-      pref_gender: meta.pref_gender || "any",
-      pref_age:
-        meta.pref_age === undefined ||
-          meta.pref_age === null ||
-          meta.pref_age === "any"
-          ? "any"
-          : Number(meta.pref_age),
-      isStrict: meta.isStrict === "true",
+      age: meta.age ? Number(meta.age) : null
     };
   }
 
-  /** Given a userId, build the Redis key where their metadata is stored. */
+  /** Build Redis key for user metadata */
   private static metadataKey(userId: string): string {
     return `chime-video-user:${userId}`;
   }
 
-  /**
-   * This method is responsible for the lock the both caller and callee as candidate if the lock 
-   * @param {string} param0.callerId - CallerId  
-   * @param candidateId 
-   * @returns {Promise<string | null>} If isLocked done then return the candidate id if not then return the null
-   */
+  /** Finalize match by locking both users and cleaning them up from Redis */
   private static async finalizeMatch(callerId: string, candidateId: string): Promise<string | null> {
     const isLocked = await redisLock.lockPair(callerId, candidateId, this.VIDEO_CALL_LOCK_PREFIX);
     if (isLocked) {
       try {
-        // Clean-up
         await Promise.all([
           VideoCallUserQueue.removeUser(callerId),
           VideoCallUserQueue.removeUser(candidateId),
@@ -81,209 +58,184 @@ export default class VideoCallUserQueue {
       }
       return candidateId;
     }
-
     return null;
   }
 
+  /** Calculate age range category */
+  private static getAgeRange(age: string): string {
+    const ageNum = parseInt(age, 10);
+    if (isNaN(ageNum)) return "any";
+    if (ageNum <= 17) return "underage";
+    if (ageNum <= 25) return "18-25";
+    if (ageNum <= 40) return "26-40";
+    return "40+";
+  }
 
 
-  // ─────────────────────────
-  // Public: Add & Remove Users
-  // ─────────────────────────
+  /** Add a user to Redis waiting pool */
+  static async addUser(userId: string, userDetails: UserDetails = {}): Promise<void> {
+    if (!userId) throw new Error("addUser: userId is required");
+    if (!userDetails) throw new Error("UserDetails required.");
 
-  /**
-   * Add a user into the waiting pool.
-   */
-  static async addUser(
-    userId: string,
-    filters: Filters = {},
-    userDetails: UserDetails = {}
-  ): Promise<void> {
-    if (!userId) {
-      throw new Error("addUser: userId is required");
-    }
-
-
-    const isUserAlreadyLockedInRemoveQueue = await redisLock.isUserAlreadyLocked(userId, this.REMOVING_LOCK_PREFIX);
-    if (isUserAlreadyLockedInRemoveQueue) {
-      // Before adding the user un-lock the user from the remove-lock
+    const isLockedInRemove = await redisLock.isUserAlreadyLocked(userId, this.REMOVING_LOCK_PREFIX);
+    if (isLockedInRemove) {
       await redisLock.unlockUser(userId, this.REMOVING_LOCK_PREFIX);
+      await RedisLockKeyStore.deleteStoredLockValue(userId, this.REMOVING_LOCK_PREFIX);
     }
-    await RedisLockKeyStore.deleteStoredLockValue(userId, this.REMOVING_LOCK_PREFIX); // Delete the store lock VALUE
 
-    // Lock the user before adding the user to the set 
-    const isUserIsAlreadyLock = redisLock.lockUser(userId, this.ADDING_LOCK_PREFIX); // This will prevent from the error also
-    if (!isUserIsAlreadyLock) return; /** If lock failed return @note Lock faield means user is already in the set */
+    const isUserIsAlreadyLock = redisLock.lockUser(userId, this.ADDING_LOCK_PREFIX);
+    if (!isUserIsAlreadyLock) return;
 
-    const metaKey = this.metadataKey(userId); // Get the meta key for user
-    const EXPIRY_SECONDS = 60 * 5; // 5 minutes expiry time
+    const metaKey = this.metadataKey(userId);
+    const EXPIRY_SECONDS = 30; // Half a minute
 
-
-    // Normalize user’s own attributes
     const country = this.normalizeAttr(userDetails.country);
     const gender = this.normalizeAttr(userDetails.gender);
+    const age = userDetails.age !== undefined && userDetails.age !== null
+      ? String(userDetails.age).trim().toLowerCase()
+      : "any";
 
-    // If age is number, normalize as string; else fallback to 'any'
-    const age =
-      userDetails.age !== undefined && userDetails.age !== null
-        ? String(userDetails.age).trim().toLowerCase()
-        : "any";
-
-    // Normalize preferences
-    const prefCountry = this.normalizeAttr(filters.country);
-    const prefGender = this.normalizeAttr(filters.gender);
-    const prefAge = this.normalizeAttr(filters.age);
-    const isStrictStr = filters.isStrict ? "true" : "false";
+    const ageRange = this.getAgeRange(age);
 
     const pipeline = videoClient.multi();
 
-    // 1) Store metadata, set expiry, add to global waiting set
-    pipeline.hSet(metaKey, {
-      country,
-      gender,
-      age,
-      pref_country: prefCountry,
-      pref_gender: prefGender,
-      pref_age: prefAge,
-      isStrict: isStrictStr,
-    });
+    // Store metadata and expiry
+    pipeline.hSet(metaKey, { country, gender, age });
     pipeline.expire(metaKey, EXPIRY_SECONDS);
-
-    // Add the user first in the waiting:all set so at the fallback we can pick up the long waiting user first
     pipeline.zAdd("waiting:all", { score: Date.now(), value: userId });
 
-    // if user donot fulfilled the filter then there county, gender and age by default is any so handle the any case store them seperately
-    if (country === "any" && gender === "any" && age === "any") {
-      pipeline.sAdd(`waiting:any`, userId);
+    // Add user to gender-specific queue
+    switch (gender) {
+      case "male":
+        pipeline.zAdd(`waiting:male:user:${gender}:${ageRange}:${country}`, { score: Date.now(), value: userId });
+        break;
+      case "female":
+        pipeline.zAdd(`waiting:female:user:${gender}:${ageRange}:${country}`, { score: Date.now(), value: userId });
+        break;
     }
 
-    // 2) Add to single‐attribute sets if not "any"
-    if (country !== "any") {
-      pipeline.sAdd(`waiting:country:${country}`, userId);
-    }
-    if (gender !== "any") {
-      pipeline.sAdd(`waiting:gender:${gender}`, userId);
-    }
-    if (age !== "any") {
-      pipeline.sAdd(`waiting:age:${age}`, userId);
-    }
 
-    // 3) Add to compound sets (pairs + triple) based on own attributes
-    if (country !== "any" && gender !== "any") {
-      pipeline.sAdd(
-        `waiting:combo:country:${country}:gender:${gender}`,
-        userId
-      );
-    }
-    if (country !== "any" && age !== "any") {
-      pipeline.sAdd(`waiting:combo:country:${country}:age:${age}`, userId);
-    }
-    if (gender !== "any" && age !== "any") {
-      pipeline.sAdd(`waiting:combo:gender:${gender}:age:${age}`, userId);
-    }
-    if (country !== "any" && gender !== "any" && age !== "any") {
-      pipeline.sAdd(
-        `waiting:combo:country:${country}:gender:${gender}:age:${age}`,
-        userId
-      );
-    }
 
-    // 4) If age is numeric, add to sorted set for age-based queries
-    const ageNum = parseInt(age, 10);
-    if (!isNaN(ageNum)) {
-      pipeline.zAdd("waiting:age_sorted", { score: ageNum, value: userId });
-    }
-
-    // Execute the commands
     await pipeline.exec();
   }
 
-  /**
-   * Fully remove a user from all Redis sets and delete their metadata key.
-   */
+  /** Remove user from Redis queue and metadata */
   static async removeUser(userId: string): Promise<void> {
     if (!userId) return;
-    const isUserIsAlreadyLock = await redisLock.isUserAlreadyLocked(userId, this.ADDING_LOCK_PREFIX);        
-    if (!isUserIsAlreadyLock)  return;
-    const isUserLocked = await redisLock.lockUser(userId, this.REMOVING_LOCK_PREFIX);     // Lock the user while removing to prevent from the multiple un-necessary remove which may contains many errors
-    if (!isUserLocked) return;
+
+    const isAddingLocked = await redisLock.isUserAlreadyLocked(userId, this.ADDING_LOCK_PREFIX);
+    if (!isAddingLocked) return;
+
+    const isRemovingLocked = await redisLock.lockUser(userId, this.REMOVING_LOCK_PREFIX);
+    if (!isRemovingLocked) return;
+
     const metaKey = this.metadataKey(userId);
     const raw = await videoClient.hGetAll(metaKey);
 
     if (!raw || Object.keys(raw).length === 0) {
-      // no metadata found; just remove userId from global set and return
-      await videoClient.sRem("waiting:all", userId);
+      await videoClient.zRem("waiting:all", userId);
       return;
     }
 
     const meta = this.normalizeObject(raw);
-    const pipeline = videoClient.multi();
+    const gender = this.normalizeAttr(meta.gender);
+    const country = this.normalizeAttr(meta.country);
+    const age = this.normalizeAttr(meta.age);
+    const ageRange = this.getAgeRange(age);
 
-    // Remove from global set
+    const pipeline = videoClient.multi();
     pipeline.zRem("waiting:all", userId);
 
-
-    if (meta.country === "any" && meta.gender === "any" && meta.age === "any") {
-      pipeline.sRem(`waiting:any`, userId);
+    switch (gender) {
+      case "male":
+        pipeline.zRem(`waiting:male:user:${gender}:${ageRange}:${country}`, userId);
+        break;
+      case "female":
+        pipeline.zRem(`waiting:female:user:${gender}:${ageRange}:${country}`, userId);
+        break;
     }
 
-    // Remove from single‐attribute sets if not "any"
-    if (meta.country !== "any") {
-      pipeline.sRem(`waiting:country:${meta.country}`, userId);
-    }
-    if (meta.gender !== "any") {
-      pipeline.sRem(`waiting:gender:${meta.gender}`, userId);
-    }
-    if (meta.age !== "any") {
-      pipeline.sRem(`waiting:age:${meta.age}`, userId);
-    }
-
-    // Remove from compound sets
-    if (meta.country !== "any" && meta.gender !== "any") {
-      pipeline.sRem(
-        `waiting:combo:country:${meta.country}:gender:${meta.gender}`,
-        userId
-      );
-    }
-    if (meta.country !== "any" && meta.age !== "any") {
-      pipeline.sRem(
-        `waiting:combo:country:${meta.country}:age:${meta.age}`,
-        userId
-      );
-    }
-    if (meta.gender !== "any" && meta.age !== "any") {
-      pipeline.sRem(`waiting:combo:gender:${meta.gender}:age:${meta.age}`, userId);
-    }
-    if (meta.country !== "any" && meta.gender !== "any" && meta.age !== "any") {
-      pipeline.sRem(
-        `waiting:combo:country:${meta.country}:gender:${meta.gender}:age:${meta.age}`,
-        userId
-      );
-    }
-
-    // Remove from sorted set if age numeric
-    const ageNum = parseInt(String(meta.age), 10);
-    if (!isNaN(ageNum)) {
-      pipeline.zRem("waiting:age_sorted", userId);
-    }
-
-    // Delete metadata hash
     pipeline.del(metaKey);
-
     await pipeline.exec();
   }
 
+  /** Find opposite gender match based on attributes */
+  private static async findOppositeGenderCandidateId(
+    gender: string,
+    ageRange: string,
+    country: string,
+    userId: string,
+  ): Promise<string | null> {
+    let candidates: string[] = [];
+    switch (gender) {
+      case "male":
+        candidates = await videoClient.zRange(`waiting:female:user:female:${ageRange}:${country}`, 0, 1);
+        break;
+      case "female":
+        candidates = await videoClient.zRange(`waiting:male:user:male:${ageRange}:${country}`, 0, 1);
+        break;
+    }
 
+    if (!candidates || candidates.length <= 0) return null;
+    const otherCandidates = candidates.filter(candidate => candidate !== userId);
+    return otherCandidates.length > 0 ? otherCandidates[0] : null;
+  }
+
+  /** Find the opposite gender with the country based */
+  private static async findByCountryAndOppositeGender(gender: string, country: string, userId: string): Promise<string | null> {
+    let candidates: string[] = [];
+    switch (gender) {
+      case "male":
+        candidates = await videoClient.zRange(`waiting:female:user:female:*:${country}`, 0, 1);
+        break;
+      case "female":
+        candidates = await videoClient.zRange(`waiting:male:user:male:*:${country}`, 0, 1);
+        break;
+    }
+    if (!candidates || candidates.length <= 0) return null;
+    const otherCandidates = candidates.filter(candidate => candidate !== userId);
+    return otherCandidates.length > 0 ? otherCandidates[0] : null;
+  }
+
+  /** Find the opposite gender with the country based */
+  private static async findByCountryAndRelatedGender(gender: string, country: string, userId: string): Promise<string | null> {
+    let candidates: string[] = [];
+    switch (gender) {
+      case "male":
+        candidates = await videoClient.zRange(`waiting:male:user:male:*:${country}`, 0, 1);
+        break;
+      case "female":
+        candidates = await videoClient.zRange(`waiting:female:user:female:*:${country}`, 0, 1);
+        break;
+    }
+    if (!candidates || candidates.length <= 0) return null;
+    const otherCandidates = candidates.filter(candidate => candidate !== userId);
+    return otherCandidates.length > 0 ? otherCandidates[0] : null;
+  }
+
+
+  /** Find same gender match if no opposite match is found */
+  private static async findRelatedGenderCandidateId(
+    gender: string,
+    ageRange: string,
+    country: string,
+    userId: string,
+  ): Promise<string | null> {
+    const key = `waiting:${gender}:user:${gender}:${ageRange}:${country}`;
+    const candidates = await videoClient.zRange(key, 0, 1);
+    if (!candidates || candidates.length === 0) return null;
+    const filtered = candidates.filter(candidate => candidate !== userId);
+    return filtered.length > 0 ? filtered[0] : null;
+  }
 
   /**
-   * 
-   * @param {string} param0.callerId - Id of the user who is caller
-   * @param {UserMetaData} param0.callerMeta - Meta data of the user who caller
-   * @returns {Promise<string | null>} if candidate found return candidate id as string other wise return false
-   */
+ * 
+ * @param {string} param0.callerId - Id of the user who is caller
+ * @param {UserMetaData} param0.callerMeta - Meta data of the user who caller
+ * @returns {Promise<string | null>} if candidate found return candidate id as string other wise return false
+ */
   private static async findFallbackMatch(
     callerId: string,
-    callerMeta: UserMetaData
   ): Promise<string | null> {
     // Constant of the global key where all the user globally set
     const fallbackSet = "waiting:all";
@@ -330,36 +282,57 @@ export default class VideoCallUserQueue {
     return null;
   }
 
-
-
   /**
-   * Main match making algorithm:
-   * 1. Fetch and normalize caller’s metadata.
-   * 2. Try `findByGenderPreference()`.
-   * 3. If null, call `findFallbackMatch()`.
-   * 4. If a match is found, return that user ID; otherwise return null.
-   */
+ * Main match making algorithm:
+ * 1. Fetch and normalize caller’s metadata.
+ * 2. Try findByGenderPreference().
+ * 3. If null, call findFallbackMatch().
+ * 4. If a match is found, return that user ID; otherwise return null.
+ */
   static async findMatch(userId: string): Promise<string | null> {
-
     if (!userId) throw new Error("userId is required");
 
     // 1) Fetch caller’s metadata
     const rawCaller = await videoClient.hGetAll(this.metadataKey(userId));
-
     if (!rawCaller || Object.keys(rawCaller).length === 0) {
-      // No metadata for caller → cannot match
-      return null;
+      return null; // Caller has no metadata
     }
+
     const callerMeta = this.normalizeObject(rawCaller);
+    const { gender, age, country } = callerMeta;
+    const ageRange = this.getAgeRange(String(age));
+    const normalizedCountry = this.normalizeAttr(country);
 
-    // Fall-Back [If in the set there are users then it will 100% match and get the candidate]
-    const fallbackMatch = await this.findFallbackMatch(userId, callerMeta);
-    if (fallbackMatch) {
-      console.log("match found from the random");
-      return await this.finalizeMatch(userId, fallbackMatch);
+    // 2) Try to find a candidate with opposite gender
+    let candidateId = await this.findOppositeGenderCandidateId(gender || "any", ageRange, normalizedCountry, userId);
+
+    if (!candidateId) {
+      // 3) If not found, try to find related gender match (same gender)
+      candidateId = await this.findRelatedGenderCandidateId(gender || "any", ageRange, normalizedCountry, userId);
     }
 
-    // No match found at all
+    if (!candidateId) {
+      // 4) If not found by opposite and relatedGender then
+      candidateId = await this.findByCountryAndOppositeGender(gender || "any", normalizedCountry, userId);
+    }
+
+    if (!candidateId) {
+      // 5) If not found try to again find related country and gender
+      candidateId = await this.findByCountryAndRelatedGender(gender || "any", normalizedCountry, userId);
+    }
+
+    // 6) If still no match, try fallback strategy
+    if (!candidateId) {
+      candidateId = await this.findFallbackMatch(userId);
+    }
+
+    // 7) Finalize match (with locking + clean-up)
+    if (candidateId) {
+      const finalized = await this.finalizeMatch(userId, candidateId);
+      return finalized;
+    }
+
+    // 8) Return null if no candidate found
     return null;
   }
 

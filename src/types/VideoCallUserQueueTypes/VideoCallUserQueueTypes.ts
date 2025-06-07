@@ -12,10 +12,10 @@ export interface UserDetails {
 }
 
 export interface UserPref {
-    pref_country?: string | null;
-    pref_gender?: string | null;
-    pref_age?: number | null | string;
-    isStrict?: boolean;
+    // pref_country?: string | null;
+    // pref_gender?: string | null;
+    // pref_age?: number | null | string;
+    // isStrict?: boolean;
 }
 
 export interface UserMetaData extends UserDetails, UserPref { }

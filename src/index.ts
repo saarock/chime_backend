@@ -32,11 +32,11 @@ import { handleEndCalls } from "./kafka/consumers/callEndConsumer.js";
 
 // Connect to the mongoDb database
 connectMonogoDbDataBase()
-  .then(() => {
-    return connectRedis();
+  .then(async () => {
+    return await connectRedis();
   })
-  .then(() => {
-    return Promise.all([
+  .then(async () => {
+    return await Promise.all([
       connectProducer(),
       startMatchConsumer(),
       handleErrors(),
