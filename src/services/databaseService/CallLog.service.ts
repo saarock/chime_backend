@@ -3,6 +3,10 @@ import type { UserCallLogs } from "../../types/index.js";
 
 class CallLogServie {
     async saveCallLogs(callLogs: UserCallLogs[]) {
+        if (callLogs.length <= 0) {
+            return;
+        }
+        
         await CallLogsModel.insertMany(callLogs);
     }
 }

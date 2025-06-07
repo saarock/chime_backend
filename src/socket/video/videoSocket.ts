@@ -5,7 +5,7 @@ import { Namespace, Socket, type DefaultEventsMap } from "socket.io";
 import VideoCallSocketByUserQueue from "../../services/redis_service/VideoCallSocketByUserQueue.js";
 import { ActiveCallRedisMap } from "../../services/redis_service/index.js";
 import { sendMessage } from "../../kafka/producer.js";
-import type { Filters } from "../../types/index.js";
+import type { Filters, UserDetails } from "../../types/index.js";
 
 /**
  * VideoSocket manages WebSocket connections for random video calling.
@@ -54,8 +54,7 @@ class VideoSocket {
   private async findRandomUser(
     socket: Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap>,
     userId: string,
-    filters: Filters,
-    userDetails = {}
+    userDetails: UserDetails
   ) {
 
     const isUserBusy = await this.activeCalls.getPartner(userId);
@@ -71,7 +70,7 @@ class VideoSocket {
     }
 
     // Add current user to waiting queue with filters
-    await VideoCallUserQueue.addUser(userId, filters, userDetails);
+    await VideoCallUserQueue.addUser(userId, userDetails);
 
     // Try to find another waiting user matching the filters
     const matchUserId = await VideoCallUserQueue.findMatch(userId);
@@ -95,7 +94,7 @@ class VideoSocket {
 
       // If matched to self (only one user in queue), re-enqueue and notify
       if (userId === matchUserId) {
-        await VideoCallUserQueue.addUser(userId, filters, userDetails);
+        await VideoCallUserQueue.addUser(userId, userDetails);
         socket.emit("self-loop");
         const errorLogs = {
           where: "at findRandomUser",
@@ -113,8 +112,8 @@ class VideoSocket {
       // Before waiting first cleanup the user datas
       await VideoCallUserQueue.removeUser(userId);
       // No match yet; keep user waiting and notify      
-      await VideoCallUserQueue.addUser(userId, filters, userDetails);
-      socket.emit("wait");
+      await VideoCallUserQueue.addUser(userId, userDetails);
+      socket.emit("wait"); // Send the wait event to the client
     }
   }
 
@@ -163,11 +162,11 @@ class VideoSocket {
 
 
     // Handle random video call initiation
-    socket.on("start:random-video-call", async ({ filters, userDetails }) => {
+    socket.on("start:random-video-call", async ({ userDetails }) => {
       try {
         const isInCall = await this.activeCalls.getPartner(userId);
         if (isInCall) return;
-        await this.findRandomUser(socket, userId, filters, userDetails);
+        await this.findRandomUser(socket, userId, userDetails);
       } catch (error) {
         socket.emit("video:global:error", { message: error instanceof Error ? error.message : "Unexpected error finding match." });
         const errorLogs = {
@@ -268,7 +267,11 @@ class VideoSocket {
           const partnerSocket = this._io.sockets.get(partnerSocketId!);
           partnerSocket?.emit("user:call-ended", { isEnder: false });
           socket.emit("user:call-ended", { isEnder: true });
+          return;
         }
+
+
+        await VideoCallUserQueue.removeUser(userId); // Remove the userQueued datas
       } catch (error) {
         socket.emit("video:global:error", { message: error instanceof Error ? error.message : "Error ending call." });
         const errorLogs = {
@@ -281,29 +284,14 @@ class VideoSocket {
     });
 
 
-    socket.on("join:video-call-queue", async ({ filters, userDetails }) => {
-      try {
-
-        if (!userId) throw new Error("no user id found pleased reload your app and try again.");
-
-        await VideoCallUserQueue.addUser(userId, filters, userDetails);
-        socket.emit("wait");
-      } catch (error) {
-        socket.emit("video:global:error", { message: error instanceof Error ? error.message : "Error while adding to the queueue." });
-        const errorLogs = {
-          where: "At join:video-call-queue disconnect",
-          message: error instanceof Error ? error.message : "Something went wrong",
-          userId: userId,
-        }
-        await sendMessage("error-logs", errorLogs);
-      }
-    });
-
-
     // Handle request to end current call and retry matching
     socket.on("go:and:tell:callee:call:ended:so:you:can:try:for:others", async ({ partnerId, }) => {
       try {
         if (partnerId && userId) {
+          // Remove the caller and callee from the meta data queue
+          await VideoCallUserQueue.removeUser(userId);
+          await VideoCallUserQueue.removeUser(partnerId);
+
           const userCallLog = await this.activeCalls.deleteCall(partnerId, userId);
           await sendMessage("video-end", userCallLog);
 
@@ -346,10 +334,13 @@ class VideoSocket {
           return;
         }
 
+        await VideoCallUserQueue.removeUser(userId);
+
         // Notify partner if in an active call
         const partnerId = await this.activeCalls.getPartner(userId);
 
         if (partnerId) {
+          await VideoCallUserQueue.removeUser(partnerId);
           const partnerSocketId = await this.socketsByUser.get(partnerId);
           const partnerSocket = this._io.sockets.get(partnerSocketId!);
           partnerSocket?.emit("user:call-ended", { isEnder: false });
@@ -420,6 +411,9 @@ class VideoSocket {
       if (isCaller) {
         callerSocket.emit("user:match-found", { partnerId: calleeId, isCaller: true });
         calleeSocket.emit("user:match-found", { partnerId: callerId, isCaller: false });
+        callerSocket.emit("global:success:message", { message: `New partner found.` });
+        calleeSocket.emit("global:success:message", { message: `New partmer found.` });
+
         // Save active call state
         await this.activeCalls.setCall(callerId, calleeId);
       }

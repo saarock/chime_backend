@@ -31,7 +31,8 @@ app.use(
 app.use(express.static("public"));
 
 // Routers
-import { userRouter } from "./routes/index.js";
+import { feedBackRouter, userRouter } from "./routes/index.js";
 app.use("/api/v1/users", userRouter);
+app.use("/api/v1/users", feedBackRouter);
 
 export default app;
