@@ -1,22 +1,24 @@
 // src/types/usersTypes/user.type.ts
 // Improt all the necessary dependencies here
-
 import type { Document } from "mongoose";
+
 // user.type.ts
 export type Gender = "male" | "female" | "other";
+
+
 // User type
 export interface User {
-  _id: string;
-  fullName: string;
-  userName: string;
-  email: string;
-  phoneNumber: string;
+  _id: string; // User id
+  fullName: string; // User FullName
+  userName?: string; // User UserName [optional]
+  email: string; // User email
+  phoneNumber?: string;
   profilePicture?: string;
-  age: string;
-  gender: Gender;
+  age?: string;
+  gender?: Gender;
   relationShipStatus?: ["single", "mingle", "not-interest"];
   active: boolean;
-  country: string;
+  country?: string;
   role: "admin" | "user";
   __v: number;
   createdAt: string;
@@ -25,10 +27,9 @@ export interface User {
 }
 
 // User LoginWithGoogleType for google login
-
 export interface UserLoginWithGoogleDetails {
-  clientId: string;
-  credential: string;
+  clientId: string; // Google client id
+  credential: string; // user secure hashed crendential
 }
 
 // User document type

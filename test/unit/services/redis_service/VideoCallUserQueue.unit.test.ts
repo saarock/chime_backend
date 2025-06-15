@@ -26,7 +26,7 @@ beforeEach(async () => {
 
     userId = "3e2rdgmksdfngsdgsd;lgmsalkdgsadgg";
     await videoClient.flushAll(); // clean Redis state
-    await VideoCallUserQueue.addUser(userId, userFilter, userData);
+    await VideoCallUserQueue.addUser(userId, userData);
 });
 
 afterAll(async () => {
@@ -78,9 +78,6 @@ describe("VideoCallUserQueue addUserMethod", () => {
         const members = await videoClient.sInter(`waiting:combo:country:${'nepal'}:gender:${'female'}`);
         expect(members).toContain(userId);
     });
-
-
-
 });
 
 
@@ -132,7 +129,7 @@ describe("VideoCallUserQueue findMatch", () => {
             age: "45"
         };
 
-        await VideoCallUserQueue.addUser(userId2, userFilter1, userData1);
+        await VideoCallUserQueue.addUser(userId2,  userData1);
 
         const candidateId = await VideoCallUserQueue.findMatch(userId);
         expect(candidateId).toBe(userId2);
@@ -151,7 +148,7 @@ describe("VideoCallUserQueue findMatch", () => {
             age: "45"
         };
 
-        await VideoCallUserQueue.addUser(userId2, userFilter1, userData1);
+        await VideoCallUserQueue.addUser(userId2, userData1);
 
         const candidateId = await VideoCallUserQueue.findMatch(userId);
         expect(candidateId).toBe(userId2);

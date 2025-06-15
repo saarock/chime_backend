@@ -1,4 +1,4 @@
-// Imports
+// Import all the necessary dependencies here 
 import { verifyJWT, verifyJWTRefreshToken } from "../middlewares/index.js";
 import {
   generateAnotherAccessAndRefreshToken,
