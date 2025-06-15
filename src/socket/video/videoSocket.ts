@@ -150,6 +150,8 @@ class VideoSocket {
    * @param socket - the connected client socket
    */
   private async handleConnection(socket: Socket) {
+    console.log("new user connected to the video-socket");
+    
 
     const userId = socket.data.user._id;
 
