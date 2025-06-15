@@ -35,8 +35,6 @@ app.use(express.static("public"));
  * Node secutiry
  */
 
-
-
 // Routers
 import { feedBackRouter, userRouter } from "./routes/index.js";
 app.use("/api/v1/users", userRouter);

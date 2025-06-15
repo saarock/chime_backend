@@ -7,13 +7,13 @@ export const verifyJWTRefreshToken = asyncHandler(
     // Get the refreshToken
     const refreshToken = req.cookies.refreshToken;
 
-    // Check the token is available or not 
+    // Check the token is available or not
     if (
       refreshToken === undefined ||
       refreshToken === null ||
       refreshToken.trim() === ""
     ) {
-      // If not available then throw the error with the token-expired error-code 
+      // If not available then throw the error with the token-expired error-code
       /**
        * @note Error-code is very important to handle all the use-cases
        */
@@ -30,7 +30,6 @@ export const verifyJWTRefreshToken = asyncHandler(
     if (typeof payload === "string") {
       throw new ApiError(500, "Server Error");
     }
-
 
     // set the values to the keys
     const userId = payload._id;

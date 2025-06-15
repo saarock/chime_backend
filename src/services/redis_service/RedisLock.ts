@@ -1,5 +1,5 @@
-import { videoClient } from '../../configs/redis.js';
-import { RedisLockKeyStore } from './RedisLockKeyStore.js';
+import { videoClient } from "../../configs/redis.js";
+import { RedisLockKeyStore } from "./RedisLockKeyStore.js";
 
 class RedisLock {
   private EXPIRY = 30000;
@@ -16,7 +16,7 @@ class RedisLock {
         PX: this.EXPIRY,
       });
 
-      if (result === 'OK') {
+      if (result === "OK") {
         await RedisLockKeyStore.storeLockValue(userId, lockValue, PREFIX);
         return true;
       }
@@ -25,7 +25,6 @@ class RedisLock {
       return false;
     }
   }
-
 
   private async unLockHelper(userId: string, PREFIX: string): Promise<boolean> {
     const lockKey = RedisLockKeyStore.generateLockKey(userId, PREFIX);
@@ -69,7 +68,11 @@ class RedisLock {
 
   // ---------------------- Lock Both Caller & Partner ----------------------
 
-  async lockPair(callerId: string, partnerId: string, PREFIX: string): Promise<boolean> {
+  async lockPair(
+    callerId: string,
+    partnerId: string,
+    PREFIX: string,
+  ): Promise<boolean> {
     const lockKeyCaller = RedisLockKeyStore.generateLockKey(callerId, PREFIX);
     const lockKeyPartner = RedisLockKeyStore.generateLockKey(partnerId, PREFIX);
     const lockValue = await RedisLockKeyStore.generateLockValue();
@@ -81,7 +84,7 @@ class RedisLock {
       PX: EXPIRY,
     });
 
-    if (callerResult !== 'OK') {
+    if (callerResult !== "OK") {
       // Caller already locked by someone else
       return false;
     }
@@ -92,7 +95,7 @@ class RedisLock {
       PX: EXPIRY,
     });
 
-    if (partnerResult !== 'OK') {
+    if (partnerResult !== "OK") {
       // Failed to lock partner, rollback caller lock
       await videoClient.del(lockKeyCaller);
       return false;
@@ -107,7 +110,11 @@ class RedisLock {
     return true;
   }
 
-  async unlockPair(callerId: string, partnerId: string, PREFIX: string): Promise<void> {
+  async unlockPair(
+    callerId: string,
+    partnerId: string,
+    PREFIX: string,
+  ): Promise<void> {
     try {
       await Promise.all([
         this.unlockUser(callerId, PREFIX),
@@ -127,7 +134,11 @@ class RedisLock {
 
   // ---------------------- Check Lock Holder ----------------------
 
-  async isUserLockedBy(userId: string, expectedValue: string, PREFIX: string): Promise<boolean> {
+  async isUserLockedBy(
+    userId: string,
+    expectedValue: string,
+    PREFIX: string,
+  ): Promise<boolean> {
     const lockKey = RedisLockKeyStore.generateLockKey(userId, PREFIX);
     const currentValue = await videoClient.get(lockKey);
     return currentValue === expectedValue;
@@ -138,7 +149,6 @@ class RedisLock {
     const exists = await videoClient.exists(lockKey);
     return exists === 1;
   }
-
 }
 
 const redisLock = new RedisLock();

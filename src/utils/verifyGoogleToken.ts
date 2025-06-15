@@ -2,7 +2,6 @@
 import { OAuth2Client, type TokenPayload } from "google-auth-library";
 import type { UserLoginWithGoogleDetails } from "../types/index.js";
 
-
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 const verifyGoogleToken = async (
@@ -18,7 +17,7 @@ const verifyGoogleToken = async (
   if (!payload) {
     return undefined;
   }
-  
+
   // if every things all-right return the payload
   return payload;
 };

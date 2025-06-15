@@ -14,12 +14,17 @@ import type { Filters, UserDetails, UserMetaData } from "../../types/index.js";
 export default class VideoCallUserQueue {
   // Constants
   private static readonly MAX_RETRIES_MULTIPLIER = 5;
-  private static readonly VIDEO_CALL_LOCK_PREFIX = "video:call:lock:for:video:call";
-  private static readonly ADDING_LOCK_PREFIX = "video:call:user:lock:while:adding";
-  private static readonly REMOVING_LOCK_PREFIX = "video:call:user:lock:while:removing";
+  private static readonly VIDEO_CALL_LOCK_PREFIX =
+    "video:call:lock:for:video:call";
+  private static readonly ADDING_LOCK_PREFIX =
+    "video:call:user:lock:while:adding";
+  private static readonly REMOVING_LOCK_PREFIX =
+    "video:call:user:lock:while:removing";
 
   /** Normalize attribute for indexing */
-  private static normalizeAttr(attr: string | number | null | undefined): string {
+  private static normalizeAttr(
+    attr: string | number | null | undefined,
+  ): string {
     if (attr === null || attr === undefined) return "any";
     return String(attr).trim().toLowerCase() || "any";
   }
@@ -30,7 +35,7 @@ export default class VideoCallUserQueue {
     return {
       country: meta.country || null,
       gender: meta.gender || null,
-      age: meta.age ? Number(meta.age) : null
+      age: meta.age ? Number(meta.age) : null,
     };
   }
 
@@ -40,18 +45,38 @@ export default class VideoCallUserQueue {
   }
 
   /** Finalize match by locking both users and cleaning them up from Redis */
-  private static async finalizeMatch(callerId: string, candidateId: string): Promise<string | null> {
-    const isLocked = await redisLock.lockPair(callerId, candidateId, this.VIDEO_CALL_LOCK_PREFIX);
+  private static async finalizeMatch(
+    callerId: string,
+    candidateId: string,
+  ): Promise<string | null> {
+    const isLocked = await redisLock.lockPair(
+      callerId,
+      candidateId,
+      this.VIDEO_CALL_LOCK_PREFIX,
+    );
     if (isLocked) {
       try {
         await Promise.all([
           VideoCallUserQueue.removeUser(callerId),
           VideoCallUserQueue.removeUser(candidateId),
-          redisLock.unlockPair(callerId, candidateId, this.VIDEO_CALL_LOCK_PREFIX),
-          RedisLockKeyStore.deleteStoredLockValue(callerId, this.VIDEO_CALL_LOCK_PREFIX),
-          RedisLockKeyStore.deleteStoredLockValue(candidateId, this.VIDEO_CALL_LOCK_PREFIX),
+          redisLock.unlockPair(
+            callerId,
+            candidateId,
+            this.VIDEO_CALL_LOCK_PREFIX,
+          ),
+          RedisLockKeyStore.deleteStoredLockValue(
+            callerId,
+            this.VIDEO_CALL_LOCK_PREFIX,
+          ),
+          RedisLockKeyStore.deleteStoredLockValue(
+            candidateId,
+            this.VIDEO_CALL_LOCK_PREFIX,
+          ),
           redisLock.unlockUser(callerId, this.ADDING_LOCK_PREFIX),
-          RedisLockKeyStore.deleteStoredLockValue(callerId, this.ADDING_LOCK_PREFIX),
+          RedisLockKeyStore.deleteStoredLockValue(
+            callerId,
+            this.ADDING_LOCK_PREFIX,
+          ),
         ]);
       } catch (error) {
         return null;
@@ -71,19 +96,30 @@ export default class VideoCallUserQueue {
     return "40+";
   }
 
-
   /** Add a user to Redis waiting pool */
-  static async addUser(userId: string, userDetails: UserDetails = {}): Promise<void> {
+  static async addUser(
+    userId: string,
+    userDetails: UserDetails = {},
+  ): Promise<void> {
     if (!userId) throw new Error("addUser: userId is required");
     if (!userDetails) throw new Error("UserDetails required.");
 
-    const isLockedInRemove = await redisLock.isUserAlreadyLocked(userId, this.REMOVING_LOCK_PREFIX);
+    const isLockedInRemove = await redisLock.isUserAlreadyLocked(
+      userId,
+      this.REMOVING_LOCK_PREFIX,
+    );
     if (isLockedInRemove) {
       await redisLock.unlockUser(userId, this.REMOVING_LOCK_PREFIX);
-      await RedisLockKeyStore.deleteStoredLockValue(userId, this.REMOVING_LOCK_PREFIX);
+      await RedisLockKeyStore.deleteStoredLockValue(
+        userId,
+        this.REMOVING_LOCK_PREFIX,
+      );
     }
 
-    const isUserIsAlreadyLock = redisLock.lockUser(userId, this.ADDING_LOCK_PREFIX);
+    const isUserIsAlreadyLock = redisLock.lockUser(
+      userId,
+      this.ADDING_LOCK_PREFIX,
+    );
     if (!isUserIsAlreadyLock) return;
 
     const metaKey = this.metadataKey(userId);
@@ -91,9 +127,10 @@ export default class VideoCallUserQueue {
 
     const country = this.normalizeAttr(userDetails.country);
     const gender = this.normalizeAttr(userDetails.gender);
-    const age = userDetails.age !== undefined && userDetails.age !== null
-      ? String(userDetails.age).trim().toLowerCase()
-      : "any";
+    const age =
+      userDetails.age !== undefined && userDetails.age !== null
+        ? String(userDetails.age).trim().toLowerCase()
+        : "any";
 
     const ageRange = this.getAgeRange(age);
 
@@ -107,14 +144,18 @@ export default class VideoCallUserQueue {
     // Add user to gender-specific queue
     switch (gender) {
       case "male":
-        pipeline.zAdd(`waiting:male:user:${gender}:${ageRange}:${country}`, { score: Date.now(), value: userId });
+        pipeline.zAdd(`waiting:male:user:${gender}:${ageRange}:${country}`, {
+          score: Date.now(),
+          value: userId,
+        });
         break;
       case "female":
-        pipeline.zAdd(`waiting:female:user:${gender}:${ageRange}:${country}`, { score: Date.now(), value: userId });
+        pipeline.zAdd(`waiting:female:user:${gender}:${ageRange}:${country}`, {
+          score: Date.now(),
+          value: userId,
+        });
         break;
     }
-
-
 
     await pipeline.exec();
   }
@@ -123,10 +164,16 @@ export default class VideoCallUserQueue {
   static async removeUser(userId: string): Promise<void> {
     if (!userId) return;
 
-    const isAddingLocked = await redisLock.isUserAlreadyLocked(userId, this.ADDING_LOCK_PREFIX);
+    const isAddingLocked = await redisLock.isUserAlreadyLocked(
+      userId,
+      this.ADDING_LOCK_PREFIX,
+    );
     if (!isAddingLocked) return;
 
-    const isRemovingLocked = await redisLock.lockUser(userId, this.REMOVING_LOCK_PREFIX);
+    const isRemovingLocked = await redisLock.lockUser(
+      userId,
+      this.REMOVING_LOCK_PREFIX,
+    );
     if (!isRemovingLocked) return;
 
     const metaKey = this.metadataKey(userId);
@@ -148,10 +195,16 @@ export default class VideoCallUserQueue {
 
     switch (gender) {
       case "male":
-        pipeline.zRem(`waiting:male:user:${gender}:${ageRange}:${country}`, userId);
+        pipeline.zRem(
+          `waiting:male:user:${gender}:${ageRange}:${country}`,
+          userId,
+        );
         break;
       case "female":
-        pipeline.zRem(`waiting:female:user:${gender}:${ageRange}:${country}`, userId);
+        pipeline.zRem(
+          `waiting:female:user:${gender}:${ageRange}:${country}`,
+          userId,
+        );
         break;
     }
 
@@ -169,50 +222,87 @@ export default class VideoCallUserQueue {
     let candidates: string[] = [];
     switch (gender) {
       case "male":
-        candidates = await videoClient.zRange(`waiting:female:user:female:${ageRange}:${country}`, 0, 1);
+        candidates = await videoClient.zRange(
+          `waiting:female:user:female:${ageRange}:${country}`,
+          0,
+          1,
+        );
         break;
       case "female":
-        candidates = await videoClient.zRange(`waiting:male:user:male:${ageRange}:${country}`, 0, 1);
+        candidates = await videoClient.zRange(
+          `waiting:male:user:male:${ageRange}:${country}`,
+          0,
+          1,
+        );
         break;
     }
 
     if (!candidates || candidates.length <= 0) return null;
-    const otherCandidates = candidates.filter(candidate => candidate !== userId);
+    const otherCandidates = candidates.filter(
+      (candidate) => candidate !== userId,
+    );
     return otherCandidates.length > 0 ? otherCandidates[0] : null;
   }
 
   /** Find the opposite gender with the country based */
-  private static async findByCountryAndOppositeGender(gender: string, country: string, userId: string): Promise<string | null> {
+  private static async findByCountryAndOppositeGender(
+    gender: string,
+    country: string,
+    userId: string,
+  ): Promise<string | null> {
     let candidates: string[] = [];
     switch (gender) {
       case "male":
-        candidates = await videoClient.zRange(`waiting:female:user:female:*:${country}`, 0, 1);
+        candidates = await videoClient.zRange(
+          `waiting:female:user:female:*:${country}`,
+          0,
+          1,
+        );
         break;
       case "female":
-        candidates = await videoClient.zRange(`waiting:male:user:male:*:${country}`, 0, 1);
+        candidates = await videoClient.zRange(
+          `waiting:male:user:male:*:${country}`,
+          0,
+          1,
+        );
         break;
     }
     if (!candidates || candidates.length <= 0) return null;
-    const otherCandidates = candidates.filter(candidate => candidate !== userId);
+    const otherCandidates = candidates.filter(
+      (candidate) => candidate !== userId,
+    );
     return otherCandidates.length > 0 ? otherCandidates[0] : null;
   }
 
   /** Find the opposite gender with the country based */
-  private static async findByCountryAndRelatedGender(gender: string, country: string, userId: string): Promise<string | null> {
+  private static async findByCountryAndRelatedGender(
+    gender: string,
+    country: string,
+    userId: string,
+  ): Promise<string | null> {
     let candidates: string[] = [];
     switch (gender) {
       case "male":
-        candidates = await videoClient.zRange(`waiting:male:user:male:*:${country}`, 0, 1);
+        candidates = await videoClient.zRange(
+          `waiting:male:user:male:*:${country}`,
+          0,
+          1,
+        );
         break;
       case "female":
-        candidates = await videoClient.zRange(`waiting:female:user:female:*:${country}`, 0, 1);
+        candidates = await videoClient.zRange(
+          `waiting:female:user:female:*:${country}`,
+          0,
+          1,
+        );
         break;
     }
     if (!candidates || candidates.length <= 0) return null;
-    const otherCandidates = candidates.filter(candidate => candidate !== userId);
+    const otherCandidates = candidates.filter(
+      (candidate) => candidate !== userId,
+    );
     return otherCandidates.length > 0 ? otherCandidates[0] : null;
   }
-
 
   /** Find same gender match if no opposite match is found */
   private static async findRelatedGenderCandidateId(
@@ -224,16 +314,16 @@ export default class VideoCallUserQueue {
     const key = `waiting:${gender}:user:${gender}:${ageRange}:${country}`;
     const candidates = await videoClient.zRange(key, 0, 1);
     if (!candidates || candidates.length === 0) return null;
-    const filtered = candidates.filter(candidate => candidate !== userId);
+    const filtered = candidates.filter((candidate) => candidate !== userId);
     return filtered.length > 0 ? filtered[0] : null;
   }
 
   /**
- * 
- * @param {string} param0.callerId - Id of the user who is caller
- * @param {UserMetaData} param0.callerMeta - Meta data of the user who caller
- * @returns {Promise<string | null>} if candidate found return candidate id as string other wise return false
- */
+   *
+   * @param {string} param0.callerId - Id of the user who is caller
+   * @param {UserMetaData} param0.callerMeta - Meta data of the user who caller
+   * @returns {Promise<string | null>} if candidate found return candidate id as string other wise return false
+   */
   private static async findFallbackMatch(
     callerId: string,
   ): Promise<string | null> {
@@ -248,11 +338,11 @@ export default class VideoCallUserQueue {
 
       // Find the oldest waiting users each time it return  0 - 9, 10- 19, 20 - 29 and so on users but only if there are users other wise it will return the empty array
       const result = await videoClient.sendCommand([
-        'ZRANGE',
+        "ZRANGE",
         fallbackSet,
         startIndex.toString(),
         endIndex.toString(),
-        'WITHSCORES'
+        "WITHSCORES",
       ]);
 
       if (!Array.isArray(result) || result.length === 0) {
@@ -264,7 +354,7 @@ export default class VideoCallUserQueue {
       for (let i = 0; i < result.length; i += 2) {
         entries.push({
           userId: result[i],
-          score: parseInt(result[i + 1])
+          score: parseInt(result[i + 1]),
         });
       }
 
@@ -283,12 +373,12 @@ export default class VideoCallUserQueue {
   }
 
   /**
- * Main match making algorithm:
- * 1. Fetch and normalize caller’s metadata.
- * 2. Try findByGenderPreference().
- * 3. If null, call findFallbackMatch().
- * 4. If a match is found, return that user ID; otherwise return null.
- */
+   * Main match making algorithm:
+   * 1. Fetch and normalize caller’s metadata.
+   * 2. Try findByGenderPreference().
+   * 3. If null, call findFallbackMatch().
+   * 4. If a match is found, return that user ID; otherwise return null.
+   */
   static async findMatch(userId: string): Promise<string | null> {
     if (!userId) throw new Error("userId is required");
 
@@ -304,21 +394,39 @@ export default class VideoCallUserQueue {
     const normalizedCountry = this.normalizeAttr(country);
 
     // 2) Try to find a candidate with opposite gender
-    let candidateId = await this.findOppositeGenderCandidateId(gender || "any", ageRange, normalizedCountry, userId);
+    let candidateId = await this.findOppositeGenderCandidateId(
+      gender || "any",
+      ageRange,
+      normalizedCountry,
+      userId,
+    );
 
     if (!candidateId) {
       // 3) If not found, try to find related gender match (same gender)
-      candidateId = await this.findRelatedGenderCandidateId(gender || "any", ageRange, normalizedCountry, userId);
+      candidateId = await this.findRelatedGenderCandidateId(
+        gender || "any",
+        ageRange,
+        normalizedCountry,
+        userId,
+      );
     }
 
     if (!candidateId) {
       // 4) If not found by opposite and relatedGender then
-      candidateId = await this.findByCountryAndOppositeGender(gender || "any", normalizedCountry, userId);
+      candidateId = await this.findByCountryAndOppositeGender(
+        gender || "any",
+        normalizedCountry,
+        userId,
+      );
     }
 
     if (!candidateId) {
       // 5) If not found try to again find related country and gender
-      candidateId = await this.findByCountryAndRelatedGender(gender || "any", normalizedCountry, userId);
+      candidateId = await this.findByCountryAndRelatedGender(
+        gender || "any",
+        normalizedCountry,
+        userId,
+      );
     }
 
     // 6) If still no match, try fallback strategy
@@ -335,5 +443,4 @@ export default class VideoCallUserQueue {
     // 8) Return null if no candidate found
     return null;
   }
-
 }

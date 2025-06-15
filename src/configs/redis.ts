@@ -1,9 +1,6 @@
 import { createClient } from "redis";
 
-
-
 // use the redis lock to avoid the race condition
-
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 
@@ -11,8 +8,6 @@ const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 const client = createClient({ url: REDIS_URL });
 const videoClient = createClient({ url: REDIS_URL });
 const videoClient2 = createClient({ url: REDIS_URL });
-
-
 
 // Connection logging
 const handleRedisError = (name: string) => (err: any) =>

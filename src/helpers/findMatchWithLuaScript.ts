@@ -1,4 +1,3 @@
 class findMatchWithLuaScript {
-    findMatch(userId: string, filters = {}, userDetails = {}) {
-    }
+  findMatch(userId: string, filters = {}, userDetails = {}) {}
 }

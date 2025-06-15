@@ -15,31 +15,22 @@ export const loginFromTheGoogle = asyncHandler(async (req, res, _) => {
       clientId: clientId,
     });
 
-
   // If the login is successfull the sending the response to the client within the cookies also
   return res
     .status(200)
-    .cookie(
-      "accessToken", accessToken, {
+    .cookie("accessToken", accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       maxAge: 5000,
-    }
-    )
+    })
     .cookie("refreshToken", refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
-      maxAge: 30 * 24 * 60 * 60 * 1000,  // 30 days for refresh token
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days for refresh token
     })
-    .json(
-      new ApiResponse(
-        200,
-        { userData },
-        "Login From Google successfull.",
-      ),
-    );
+    .json(new ApiResponse(200, { userData }, "Login From Google successfull."));
 });
 // verifyUser controller
 export const verifyUser = asyncHandler(async (req, res, _) => {
@@ -63,27 +54,19 @@ export const generateAnotherAccessAndRefreshToken = asyncHandler(
 
     return res
       .status(200)
-      .cookie(
-        "accessToken", accessToken, {
+      .cookie("accessToken", accessToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
         maxAge: 5000,
-      }
-      )
+      })
       .cookie("refreshToken", refreshToken, {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
         sameSite: "lax",
-        maxAge: 30 * 24 * 60 * 60 * 1000,  // 30 days for refresh token
+        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days for refresh token
       })
-      .json(
-        new ApiResponse(
-          200,
-          null,
-          "Token refreshed successfully",
-        ),
-      );
+      .json(new ApiResponse(200, null, "Token refreshed successfully"));
   },
 );
 
@@ -109,8 +92,6 @@ export const logOutUser = asyncHandler(async (req, res, _) => {
     .json(new ApiResponse(200, null, "User Logged Out successfully."));
 });
 
-
-
 export const addUserImportantData = asyncHandler(async (req, res, _) => {
   const { age, country, gender, userId } = req.body;
   console.log(age);
@@ -121,11 +102,10 @@ export const addUserImportantData = asyncHandler(async (req, res, _) => {
     age: age,
     country: country,
     gender: gender,
-    userId: userId
+    userId: userId,
   });
 
   return res
     .status(200)
     .json(new ApiResponse(200, userUpdateImportantDetails, "Details updated"));
-
 });

@@ -1,4 +1,4 @@
-// Import all the necessary dependencies here 
+// Import all the necessary dependencies here
 import { verifyJWT, verifyJWTRefreshToken } from "../middlewares/index.js";
 import {
   generateAnotherAccessAndRefreshToken,
@@ -6,7 +6,10 @@ import {
   verifyUser,
 } from "../controllers/index.js";
 import { Router } from "express";
-import { addUserImportantData, logOutUser } from "../controllers/user.controller.js";
+import {
+  addUserImportantData,
+  logOutUser,
+} from "../controllers/user.controller.js";
 
 const userRouter = Router();
 

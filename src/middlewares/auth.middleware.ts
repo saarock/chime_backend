@@ -20,18 +20,12 @@ export const verifyJWT = asyncHandler(
   async (req: Request, res: Response, next: NextFunction) => {
     // Get the accessToken from the user request
     const token = req.cookies.accessToken;
-    
-    // Check that token is available or not 
+
+    // Check that token is available or not
     if (!token) {
-      // If access-token is not available then it means that token is expired or user deleteted manually that's why send the error with the 
+      // If access-token is not available then it means that token is expired or user deleteted manually that's why send the error with the
       // token_expired error-code to triggered the refresh-token
-      throw new ApiError(
-        401,
-        "Unauthorized request",
-        [],
-        "",
-        "token_expired"
-      );
+      throw new ApiError(401, "Unauthorized request", [], "", "token_expired");
     }
 
     // Decode the token and get the userPayload

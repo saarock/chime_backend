@@ -5,7 +5,6 @@ import type { Document } from "mongoose";
 // user.type.ts
 export type Gender = "male" | "female" | "other";
 
-
 // User type
 export interface User {
   _id: string; // User id
@@ -55,14 +54,12 @@ export interface RefreshTokenPayloadTypes {
   exp: number;
 }
 
-
 export interface UserImpDetails {
   age: number;
   country: string;
   gender: string;
   userId: string;
 }
-
 
 // User call logs
 export interface UserCallLogs {

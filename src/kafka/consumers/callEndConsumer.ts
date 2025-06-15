@@ -1,24 +1,20 @@
-import { createConsumer } from "./baseConsumer.js"
+import { createConsumer } from "./baseConsumer.js";
 import { LOGS_BATCH_SIZE, FLUSH_INTERVAL_MS } from "../../constant.js";
 import callLogService from "../../services/databaseService/CallLog.service.js";
-
 
 const callBuffer: any[] = [];
 
 async function flushCallLogs() {
-    await callLogService.saveCallLogs(callBuffer);
+  await callLogService.saveCallLogs(callBuffer);
 }
 
 setTimeout(flushCallLogs, FLUSH_INTERVAL_MS);
 
 export const handleEndCalls = async () => {
-    createConsumer("video-end", "end-call-group", async (message) => {
-        callBuffer.push(message);
-        if (callBuffer.length >= LOGS_BATCH_SIZE) {
-            await flushCallLogs();
-        }
-    });
-
-}
-
-
+  createConsumer("video-end", "end-call-group", async (message) => {
+    callBuffer.push(message);
+    if (callBuffer.length >= LOGS_BATCH_SIZE) {
+      await flushCallLogs();
+    }
+  });
+};

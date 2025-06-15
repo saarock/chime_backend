@@ -19,7 +19,7 @@ class UserService {
   }
 
   /**
-   * This service method is responsible for handeling the login part like decode the crendentials, and check that user is already exist or not, if already exist then simply login, if not then first 
+   * This service method is responsible for handeling the login part like decode the crendentials, and check that user is already exist or not, if already exist then simply login, if not then first
    * saved user details to the database then handle login along handles the cache also by using the helper methods
    * @param {string} param0.googleTokens.clientId - Google client id
    * @param {string} param0.googleTokens.credential - User secure hashed crendential
@@ -220,7 +220,7 @@ class UserService {
   }
 
   async addUserImportantDetails(
-    userImportantDetails: UserImpDetails
+    userImportantDetails: UserImpDetails,
   ): Promise<UserImpDetails | null> {
     // 1. Validate input payload
     if (!userImportantDetails) {
@@ -262,7 +262,6 @@ class UserService {
 
     // 5. Cache it
     await userHelper.cacheTheUserDataById(userId, JSON.stringify(updated));
-
 
     // 6. Return just the important details
     const result: UserImpDetails = {

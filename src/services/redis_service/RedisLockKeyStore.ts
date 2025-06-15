@@ -1,4 +1,4 @@
-import { videoClient } from '../../configs/redis.js';
+import { videoClient } from "../../configs/redis.js";
 
 export class RedisLockKeyStore {
   static generateLockKey(userId: string, PREFIX: string): string {

@@ -12,7 +12,7 @@ const { JsonWebTokenError, TokenExpiredError } = jwt;
  * - Expects the JWT to be present in the 'accessToken' cookie.
  * - Decodes and verifies the token.
  * - Injects the decoded user data into `socket.data.user`.
- * 
+ *
  * This middleware helps secure WebSocket connections by ensuring only
  * authenticated users can proceed with socket interactions.
  */
