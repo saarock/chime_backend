@@ -219,6 +219,40 @@ class UserService {
     }
   }
 
+
+
+  /**
+ * Updates and stores important user profile details in the database.
+ *
+ * This method follows these steps:
+ *
+ * 1. Validates the input payload to ensure required fields are present:
+ *    - userId, age, country, and gender are mandatory.
+ *    - phoneNumber and relationShipStatus are optional but included if provided.
+ *
+ * 2. Retrieves the user by the given userId.
+ *    - If the user is not found, throws a 404 error.
+ *
+ * 3. Updates the user document with the provided details.
+ *    - age, country, and gender are always updated.
+ *    - phoneNumber and relationShipStatus are conditionally updated if provided and non-empty.
+ *
+ * 4. Saves the updated user document to the database.
+ *
+ * 5. Re-fetches the updated user, excluding sensitive fields (e.g., password, refreshToken).
+ *    - Ensures the returned data is safe and clean.
+ *
+ * 6. Caches the updated user data by userId.
+ *    - Helps optimize future lookups by reducing database queries.
+ *
+ * 7. Returns a structured object containing only the important details needed on the frontend or client.
+ *
+ * @param userImportantDetails - Object containing user's age, country, gender, optional phone number,
+ *                               and relationship status along with userId.
+ * @returns A Promise that resolves to the updated user important details or throws an error.
+ *
+ * @throws ApiError if input is invalid, user is not found, or database update fails.
+ */
   async addUserImportantDetails(
     userImportantDetails: UserImpDetails,
   ): Promise<UserImpDetails | null> {
@@ -226,7 +260,7 @@ class UserService {
     if (!userImportantDetails) {
       throw new ApiError(400, "Request body is required");
     }
-    const { userId, age, country, gender } = userImportantDetails;
+    const { userId, age, country, gender, phoneNumber, relationshipStatus } = userImportantDetails;
     if (!userId) {
       throw new ApiError(400, "userId is required");
     }
@@ -250,6 +284,18 @@ class UserService {
     user.age = age;
     user.country = country;
     user.gender = gender.toLowerCase();
+
+    if (relationshipStatus && relationshipStatus.trim() != "") {
+      // If there is relationship status send by the user then saved to the database
+      user.relationShipStatus = relationshipStatus;
+    }
+
+    if (phoneNumber && phoneNumber.trim() != "") {
+      // If there is phoneNumber sent by user then saved to the database
+      user.phoneNumber = phoneNumber;
+    }
+
+    // Save the user 
     await user.save();
 
     // 4. Retrieve the updated document (excluding sensitive fields)
@@ -268,7 +314,9 @@ class UserService {
       age: Number(updated.age),
       country: updated.country!,
       gender: updated.gender!,
-      userId, // include if your type requires it
+      relationshipStatus: updated.relationShipStatus ? updated.relationShipStatus : "Not-specified",
+      phoneNumber: updated.phoneNumber ? updated.phoneNumber : "Not-provided",
+      userId, // Optional
     };
     return result;
   }

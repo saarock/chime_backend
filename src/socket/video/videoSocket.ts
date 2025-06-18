@@ -341,7 +341,7 @@ class VideoSocket {
             const partnerSocketId = await this.socketsByUser.get(partnerId);
             if (!partnerSocketId) {
               throw new Error(
-                "No partner Socket id found in go:and:tell:calle",
+                "No partner Socket id found in go:and:tell:callee",
               );
             }
             const partnerSocket = this._io.sockets.get(partnerSocketId);

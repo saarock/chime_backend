@@ -1,108 +1,141 @@
-// User controller
+// Import necessary types and utilities
 import type { TokenPayloadTypes } from "types/index.js";
 import { userService } from "../services/databaseService/index.js";
 import { ApiResponse, asyncHandler } from "../utils/index.js";
+import type { CookieOptions } from "express";
 
-// Login from google controller
+/**
+ * cookieHelper
+ * ------------
+ * Utility function to provide consistent cookie options
+ * for access and refresh tokens.
+ */
+const cookieHelper = () => {
+  const isProduction = process.env.NODE_ENV === "production";
+  const accessTokenOptions: CookieOptions = {
+    httpOnly: true, // Prevent access from client-side JS
+    secure: isProduction, // HTTPS only in production
+    sameSite: "lax", // CSRF protection
+    maxAge: 5 * 60 * 1000, // 5 minutes (short lifespan for access token)
+  };
+
+  const refreshTokenOptions: CookieOptions = {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: "lax",
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+  };
+
+  return {
+    accessTokenOptions,
+    refreshTokenOptions,
+  };
+};
+
+/**
+ * loginFromTheGoogle
+ * ------------------
+ * Handles login via Google OAuth. Receives the credential and clientId from client,
+ * verifies them via userService, and sets access/refresh tokens in cookies.
+ */
 export const loginFromTheGoogle = asyncHandler(async (req, res, _) => {
-  // Access the crendential and clientId from the body that clinet have sent for oAuth login
   const { credential, clientId } = req.body;
+  console.log("request came for Google login");
 
-  // After accessing hte credentials and clientId call the service to handle the oAuth login
   const { userData, refreshToken, accessToken } =
-    await userService.loginWithGoogle({
-      credential: credential,
-      clientId: clientId,
-    });
+    await userService.loginWithGoogle({ credential, clientId });
 
-  // If the login is successfull the sending the response to the client within the cookies also
+  const { accessTokenOptions, refreshTokenOptions } = cookieHelper();
+
   return res
     .status(200)
-    .cookie("accessToken", accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 5000,
-    })
-    .cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days for refresh token
-    })
-    .json(new ApiResponse(200, { userData }, "Login From Google successfull."));
+    .cookie("accessToken", accessToken, accessTokenOptions)
+    .cookie("refreshToken", refreshToken, refreshTokenOptions)
+    .json(new ApiResponse(200, { userData }, "Login from Google successful."));
 });
-// verifyUser controller
+
+/**
+ * verifyUser
+ * ----------
+ * Verifies the authenticated user based on JWT payload (set by middleware).
+ */
 export const verifyUser = asyncHandler(async (req, res, _) => {
   const userData = await userService.verifyUser(req.user as TokenPayloadTypes);
   return res
     .status(200)
-    .json(new ApiResponse(200, { userData }, "user-verified"));
+    .json(new ApiResponse(200, { userData }, "User verified."));
 });
 
-// generate new access and refresh token by refresh token when the access token is valid
+/**
+ * generateAnotherAccessAndRefreshToken
+ * ------------------------------------
+ * Generates new access and refresh tokens when the access token is expired
+ * but the refresh token is still valid.
+ */
 export const generateAnotherAccessAndRefreshToken = asyncHandler(
   async (req, res, _) => {
     const refreshTokenByUser = req.cookies.refreshToken;
     const userId = req.userId;
 
-    const { refreshToken, accessToken } =
+    const { accessToken, refreshToken } =
       await userService.generateAnotherRefreshTokenAndAccessTokenAndChangeTheDatabaseRefreshToken(
         userId,
         refreshTokenByUser,
       );
 
+    const { accessTokenOptions, refreshTokenOptions } = cookieHelper();
+
     return res
       .status(200)
-      .cookie("accessToken", accessToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: 5000,
-      })
-      .cookie("refreshToken", refreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days for refresh token
-      })
+      .cookie("accessToken", accessToken, accessTokenOptions)
+      .cookie("refreshToken", refreshToken, refreshTokenOptions)
       .json(new ApiResponse(200, null, "Token refreshed successfully"));
   },
 );
 
-// Logout user
+/**
+ * logOutUser
+ * ----------
+ * Clears the user's authentication cookies and logs them out.
+ */
 export const logOutUser = asyncHandler(async (req, res, _) => {
   const { userId } = req.body;
   await userService.logoutUser(userId);
-  res.clearCookie("accessToken", {
+
+  // Clear cookies safely
+  const clearOptions: CookieOptions = {
     httpOnly: true,
     sameSite: "strict",
-    secure: false, // true in production
+    secure: process.env.NODE_ENV === "production",
     path: "/",
-  });
-  res.clearCookie("refreshToken", {
-    httpOnly: true,
-    sameSite: "strict",
-    secure: false,
-    path: "/",
-  });
+  };
+
+  res.clearCookie("accessToken", clearOptions);
+  res.clearCookie("refreshToken", clearOptions);
 
   return res
     .status(200)
-    .json(new ApiResponse(200, null, "User Logged Out successfully."));
+    .json(new ApiResponse(200, null, "User logged out successfully."));
 });
 
+/**
+ * addUserImportantData
+ * --------------------
+ * Adds or updates additional user details (e.g., age, country, gender)
+ * after login or registration.
+ */
 export const addUserImportantData = asyncHandler(async (req, res, _) => {
-  const { age, country, gender, userId } = req.body;
-  console.log(age);
-  console.log(country);
-  console.log(gender);
+  console.log(req.body);
+  
+  const { age, country, gender, userId, relationshipStatus, phoneNumber } = req.body;
 
   const userUpdateImportantDetails = await userService.addUserImportantDetails({
-    age: age,
-    country: country,
-    gender: gender,
-    userId: userId,
+    age,
+    country,
+    gender,
+    userId,
+    relationshipStatus,
+    phoneNumber
   });
 
   return res

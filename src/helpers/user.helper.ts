@@ -6,7 +6,7 @@ import { ApiError } from "../utils/index.js";
 
 class UserHelper {
   // this cache helper method is just for the authentication and authorization user data cache other core cache are in the cache folder
-  cacheTheUserDataById = async (key: string, value: string) => {
+  public cacheTheUserDataById = async (key: string, value: string) => {
     try {
       // Cache the user data in Redis (excluding sensitive data)
       await client.set(`user:${key}`, value, {
@@ -23,7 +23,7 @@ class UserHelper {
   };
 
   // Helper method to generate access and refresh tokens
-  generateAccessAndRefreshTokensAndCacheTheUserDataInRedis = async (
+  public generateAccessAndRefreshTokensAndCacheTheUserDataInRedis = async (
     userId: string,
     userDataWithoutSensitiveData: userTypes,
   ): Promise<{ accessToken: string; refreshToken: string }> => {
@@ -57,7 +57,7 @@ class UserHelper {
   };
 
   // Get the cache data by userId
-  getUserRedisCacheData = async (userId: string): Promise<userTypes | null> => {
+  public getUserRedisCacheData = async (userId: string): Promise<userTypes | null> => {
     const userCacheData = await client.get(`user:${userId}`);
     if (userCacheData && JSON.parse(userCacheData)) {
       return JSON.parse(userCacheData);
