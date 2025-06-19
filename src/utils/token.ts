@@ -91,7 +91,7 @@ class Token {
         "Unauthorized request",
         ["Unauthorized request"],
         "At token.js file line number 40 to 41",
-        "token_expired",
+        "token_expired", // Error code is important the only token_expired error code will triggered the refresh token
       );
     }
   }

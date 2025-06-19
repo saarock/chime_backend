@@ -13,12 +13,18 @@ import userHelper from "../../helpers/user.helper.js";
 
 // UserService class for login, logout, register and other user related things
 class UserService {
-  #userHelper;
+  private userHelper;
   constructor() {
-    this.#userHelper = userHelper;
+    this.userHelper = userHelper;
   }
 
-  // Main method for login with Google
+  /**
+   * This service method is responsible for handeling the login part like decode the crendentials, and check that user is already exist or not, if already exist then simply login, if not then first
+   * saved user details to the database then handle login along handles the cache also by using the helper methods
+   * @param {string} param0.googleTokens.clientId - Google client id
+   * @param {string} param0.googleTokens.credential - User secure hashed crendential
+   * @returns {Promise<UserData, refreshToken, accessToken >}
+   */
   async loginWithGoogle(googleTokens: UserLoginWithGoogleDetails): Promise<{
     userData: userTypes;
     refreshToken: string;
@@ -29,14 +35,17 @@ class UserService {
       await verifyGoogleToken(googleTokens);
 
     if (!userGoogleDatas) {
+      // If no TokenPayload available then then throw the error
       throw new ApiError(404, "Google Payload Not Found");
     }
 
     if (!userGoogleDatas.email) {
+      // If no email available then throw the error
       throw new ApiError(404, "Email is required!");
     }
 
     if (!userGoogleDatas.name) {
+      // If no name available then thrw the error
       throw new ApiError(404, "fulName is required");
     }
 
@@ -48,6 +57,7 @@ class UserService {
       .lean<userTypes>();
 
     if (alreadySavedUser) {
+      // If user is already get registered
       if (!alreadySavedUser.active) {
         // throw error if the user is blocked or not active
         throw new ApiError(
@@ -56,12 +66,14 @@ class UserService {
         );
       }
 
-      // If user already exists, generate access and refresh tokens and cache the  userDetails [Login User]
+      // If user already exists, generate access and refresh tokens and cache the  userDetails [Login User] useing the helper method
       const { accessToken, refreshToken } =
-        await this.#userHelper.generateAccessAndRefreshTokensAndCacheTheUserDataInRedis(
+        await this.userHelper.generateAccessAndRefreshTokensAndCacheTheUserDataInRedis(
           alreadySavedUser._id,
           alreadySavedUser,
         );
+
+      // If all the process completed then simply retrun the tokens with userData
       return { userData: alreadySavedUser, accessToken, refreshToken };
     }
 
@@ -84,7 +96,7 @@ class UserService {
 
     // Step 5: Generate access and refresh tokens for the new user and cachne the userDetails
     const { accessToken, refreshToken } =
-      await this.#userHelper.generateAccessAndRefreshTokensAndCacheTheUserDataInRedis(
+      await this.userHelper.generateAccessAndRefreshTokensAndCacheTheUserDataInRedis(
         justCreatedUser._id,
         userWithoutSensitiveData,
       );
@@ -96,7 +108,7 @@ class UserService {
   async verifyUser(decoded: TokenPayloadTypes): Promise<userTypes> {
     // get the userData form the cache
     const isThereisUserData: userTypes | null =
-      await this.#userHelper.getUserRedisCacheData(decoded._id);
+      await this.userHelper.getUserRedisCacheData(decoded._id);
 
     let userData;
     if (isThereisUserData) {
@@ -110,7 +122,7 @@ class UserService {
         .lean<userTypes>();
       if (userData) {
         // chache the data again;
-        this.#userHelper.cacheTheUserDataById(
+        this.userHelper.cacheTheUserDataById(
           userData?._id.toString(),
           JSON.stringify(userData),
         );
@@ -148,7 +160,7 @@ class UserService {
     // compare database refreshToken and client token
     if (currentUser.refreshToken === refreshTokenFromClient) {
       const userRedisCacheData =
-        await this.#userHelper.getUserRedisCacheData(userId);
+        await this.userHelper.getUserRedisCacheData(userId);
 
       let userDataWithoutSensativeData;
 
@@ -164,7 +176,7 @@ class UserService {
       if (!userDataWithoutSensativeData)
         throw new ApiError(400, "UserDetails not found by ID");
       const { refreshToken, accessToken } =
-        await this.#userHelper.generateAccessAndRefreshTokensAndCacheTheUserDataInRedis(
+        await this.userHelper.generateAccessAndRefreshTokensAndCacheTheUserDataInRedis(
           userDataWithoutSensativeData?._id,
           userDataWithoutSensativeData,
         );
@@ -174,7 +186,7 @@ class UserService {
       };
     } else {
       throw new ApiError(
-        403,
+        401,
         "You do not have permission for the requested action",
         ["while refreshing the token"],
       );
@@ -207,14 +219,48 @@ class UserService {
     }
   }
 
+
+
+  /**
+ * Updates and stores important user profile details in the database.
+ *
+ * This method follows these steps:
+ *
+ * 1. Validates the input payload to ensure required fields are present:
+ *    - userId, age, country, and gender are mandatory.
+ *    - phoneNumber and relationShipStatus are optional but included if provided.
+ *
+ * 2. Retrieves the user by the given userId.
+ *    - If the user is not found, throws a 404 error.
+ *
+ * 3. Updates the user document with the provided details.
+ *    - age, country, and gender are always updated.
+ *    - phoneNumber and relationShipStatus are conditionally updated if provided and non-empty.
+ *
+ * 4. Saves the updated user document to the database.
+ *
+ * 5. Re-fetches the updated user, excluding sensitive fields (e.g., password, refreshToken).
+ *    - Ensures the returned data is safe and clean.
+ *
+ * 6. Caches the updated user data by userId.
+ *    - Helps optimize future lookups by reducing database queries.
+ *
+ * 7. Returns a structured object containing only the important details needed on the frontend or client.
+ *
+ * @param userImportantDetails - Object containing user's age, country, gender, optional phone number,
+ *                               and relationship status along with userId.
+ * @returns A Promise that resolves to the updated user important details or throws an error.
+ *
+ * @throws ApiError if input is invalid, user is not found, or database update fails.
+ */
   async addUserImportantDetails(
-    userImportantDetails: UserImpDetails
+    userImportantDetails: UserImpDetails,
   ): Promise<UserImpDetails | null> {
     // 1. Validate input payload
     if (!userImportantDetails) {
       throw new ApiError(400, "Request body is required");
     }
-    const { userId, age, country, gender } = userImportantDetails;
+    const { userId, age, country, gender, phoneNumber, relationshipStatus } = userImportantDetails;
     if (!userId) {
       throw new ApiError(400, "userId is required");
     }
@@ -238,6 +284,18 @@ class UserService {
     user.age = age;
     user.country = country;
     user.gender = gender.toLowerCase();
+
+    if (relationshipStatus && relationshipStatus.trim() != "") {
+      // If there is relationship status send by the user then saved to the database
+      user.relationShipStatus = relationshipStatus;
+    }
+
+    if (phoneNumber && phoneNumber.trim() != "") {
+      // If there is phoneNumber sent by user then saved to the database
+      user.phoneNumber = phoneNumber;
+    }
+
+    // Save the user 
     await user.save();
 
     // 4. Retrieve the updated document (excluding sensitive fields)
@@ -251,13 +309,14 @@ class UserService {
     // 5. Cache it
     await userHelper.cacheTheUserDataById(userId, JSON.stringify(updated));
 
-
     // 6. Return just the important details
     const result: UserImpDetails = {
       age: Number(updated.age),
-      country: updated.country,
-      gender: updated.gender,
-      userId, // include if your type requires it
+      country: updated.country!,
+      gender: updated.gender!,
+      relationshipStatus: updated.relationShipStatus ? updated.relationShipStatus : "Not-specified",
+      phoneNumber: updated.phoneNumber ? updated.phoneNumber : "Not-provided",
+      userId, // Optional
     };
     return result;
   }

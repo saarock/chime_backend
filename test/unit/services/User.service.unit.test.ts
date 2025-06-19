@@ -1,17 +1,9 @@
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeEach,
-  beforeAll,
-} from "vitest";
+import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 import { userService } from "../../../src/services/databaseService/index.js";
 import verifyGoogleToken from "../../../src/utils/verifyGoogleToken.js";
 import User from "../../../src/models/User.model.js";
 import RedisMock from "ioredis-mock";
 import userHelper from "../../../src/helpers/user.helper.js";
-
 
 vi.mock("../../../src/utils/verifyGoogleToken.js");
 vi.mock("../../../src/models/User.model.js");

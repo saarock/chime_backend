@@ -44,12 +44,11 @@ const userSchema = new Schema(
     },
     gender: {
       type: String,
-      enum: ["male", "female", "non-binary", "bubble-tea"],
+      enum: ["male", "female", "other"],
     },
 
     relationShipStatus: {
       type: String,
-      enum: ["single", "mingle", "not-interest"],
     },
     active: {
       type: Boolean,

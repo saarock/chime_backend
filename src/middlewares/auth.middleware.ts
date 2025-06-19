@@ -1,7 +1,7 @@
-// Imports
+// Import all the necessary dependencies here
 import { ApiError, asyncHandler } from "../utils/index.js";
 import { type Request, type Response, type NextFunction } from "express";
-import jwt, { type JwtPayload } from "jsonwebtoken";
+import { type JwtPayload } from "jsonwebtoken";
 import { token as tokenUtil } from "../utils/index.js";
 
 /**
@@ -18,20 +18,22 @@ declare global {
 
 export const verifyJWT = asyncHandler(
   async (req: Request, res: Response, next: NextFunction) => {
-    const token = req.headers.authorization?.split(" ")[1];
-    const jwtScret = process.env.ACCESS_TOKEN_SECRET;
+    // Get the accessToken from the user request
+    const token = req.cookies.accessToken;
 
-    if (!jwtScret || !token) {
-      throw new ApiError(
-        401,
-        "Unauthorized request",
-        ["Unauthorized request"],
-        "At auth.middleware.js file line number 20 to 21",
-        "token_expired",
-      );
+    console.log(token);
+    
+
+    // Check that token is available or not
+    if (!token) {
+      // If access-token is not available then it means that token is expired or user deleteted manually that's why send the error with the
+      // token_expired error-code to triggered the refresh-token
+      throw new ApiError(401, "Unauthorized request", [], "", "token_expired");
     }
 
+    // Decode the token and get the userPayload
     let decoded = tokenUtil.verifyAccessToken(token);
+    // Add to the req for future use-case
     req.user = decoded;
     next();
   },

@@ -7,4 +7,11 @@ import token from "./token.js";
 import { fisherShuffle } from "./fisherShuffle.js";
 
 // export
-export { ApiError, asyncHandler, ApiResponse, verifyGoogleToken, token, fisherShuffle};
+export {
+  ApiError,
+  asyncHandler,
+  ApiResponse,
+  verifyGoogleToken,
+  token,
+  fisherShuffle,
+};
