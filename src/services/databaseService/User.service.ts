@@ -186,7 +186,7 @@ class UserService {
       };
     } else {
       throw new ApiError(
-        403,
+        401,
         "You do not have permission for the requested action",
         ["while refreshing the token"],
       );

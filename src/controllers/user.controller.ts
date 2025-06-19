@@ -51,7 +51,7 @@ export const loginFromTheGoogle = asyncHandler(async (req, res, _) => {
     .status(200)
     .cookie("accessToken", accessToken, accessTokenOptions)
     .cookie("refreshToken", refreshToken, refreshTokenOptions)
-    .json(new ApiResponse(200, { userData }, "Login from Google successful."));
+    .json(new ApiResponse(200, { userData, accessToken }, "Login from Google successful."));
 });
 
 /**
