@@ -12,6 +12,8 @@ class UserHelper {
       await client.set(`user:${key}`, value, {
         EX: 3600,
       }); // Cache expires in 1 hour (3600 seconds)
+      console.log("cache done");
+      
     } catch (error) {
       console.error(`Error caching user data: ${error}`);
       // I want to send the userfriendly error here that's why i use try catch to catch the error and send the userfriendly error

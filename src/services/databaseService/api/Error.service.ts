@@ -1,4 +1,4 @@
-import { ErrorModel, User } from "../../models/index.js";
+import { ErrorModel, User } from "../../../models/index.js";
 
 class ErrorService {
   async saveErrorsInBulk(

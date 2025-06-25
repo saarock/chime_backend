@@ -1,7 +1,7 @@
 // Import necessary types and utilities
 import type { TokenPayloadTypes } from "types/index.js";
-import { userService } from "../services/databaseService/index.js";
-import { ApiResponse, asyncHandler } from "../utils/index.js";
+import { userService } from "../../services/databaseService/api/index.js";
+import { ApiResponse, asyncHandler } from "../../utils/index.js";
 import type { CookieOptions } from "express";
 
 /**
@@ -16,7 +16,9 @@ const cookieHelper = () => {
     httpOnly: true, // Prevent access from client-side JS
     secure: isProduction, // HTTPS only in production
     sameSite: "lax", // CSRF protection
-    maxAge: 5 * 60 * 1000, // 5 minutes (short lifespan for access token)
+    // maxAge: 5 * 60 * 1000, // 5 minutes (short lifespan for access token)
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days [For testing purpose in the mobile flutter]
+
   };
 
   const refreshTokenOptions: CookieOptions = {
@@ -74,6 +76,7 @@ export const verifyUser = asyncHandler(async (req, res, _) => {
  */
 export const generateAnotherAccessAndRefreshToken = asyncHandler(
   async (req, res, _) => {
+    // Access the cookie to validate the database refresh token vs user sent token same or not 
     const refreshTokenByUser = req.cookies.refreshToken;
     const userId = req.userId;
 
@@ -95,11 +98,11 @@ export const generateAnotherAccessAndRefreshToken = asyncHandler(
 
 /**
  * logOutUser
- * ----------
+ * ----------`
  * Clears the user's authentication cookies and logs them out.
  */
 export const logOutUser = asyncHandler(async (req, res, _) => {
-  const { userId } = req.body;
+  const userId = req.userId;
   await userService.logoutUser(userId);
 
   // Clear cookies safely
@@ -125,9 +128,9 @@ export const logOutUser = asyncHandler(async (req, res, _) => {
  * after login or registration.
  */
 export const addUserImportantData = asyncHandler(async (req, res, _) => {
-  console.log(req.body);
-  
-  const { age, country, gender, userId, relationshipStatus, phoneNumber } = req.body;
+
+  const userId = req.userId;
+  const { age, country, gender, relationshipStatus, phoneNumber, userName } = req.body;
 
   const userUpdateImportantDetails = await userService.addUserImportantDetails({
     age,
@@ -135,7 +138,8 @@ export const addUserImportantData = asyncHandler(async (req, res, _) => {
     gender,
     userId,
     relationshipStatus,
-    phoneNumber
+    phoneNumber,
+    userName
   });
 
   return res

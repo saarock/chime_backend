@@ -22,7 +22,7 @@ export const verifyJWT = asyncHandler(
     const token = req.cookies.accessToken;
 
     console.log(token);
-    
+
 
     // Check that token is available or not
     if (!token) {
@@ -35,6 +35,7 @@ export const verifyJWT = asyncHandler(
     let decoded = tokenUtil.verifyAccessToken(token);
     // Add to the req for future use-case
     req.user = decoded;
+    req.userId = decoded._id;
     next();
   },
 );

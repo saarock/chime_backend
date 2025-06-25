@@ -1,5 +1,5 @@
-import CallLogsModel from "../../models/CallLogs.model.js";
-import type { UserCallLogs } from "../../types/index.js";
+import CallLogsModel from "../../../models/CallLogs.model.js";
+import type { UserCallLogs } from "../../../types/index.js";
 
 class CallLogServie {
   async saveCallLogs(callLogs: UserCallLogs[]) {

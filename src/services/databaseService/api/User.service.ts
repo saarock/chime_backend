@@ -1,15 +1,15 @@
 // src/services/User.services.ts
 import type { TokenPayload } from "google-auth-library";
-import { User } from "../../models/index.js";
+import { User } from "../../../models/index.js";
 import type {
   TokenPayloadTypes,
   User as userTypes,
   UserLoginWithGoogleDetails,
   UserImpDetails,
-} from "../../types/index.js";
-import verifyGoogleToken from "../../utils/verifyGoogleToken.js";
-import ApiError from "../../utils/ApiError.js";
-import userHelper from "../../helpers/user.helper.js";
+} from "../../../types/index.js";
+import verifyGoogleToken from "../../../utils/verifyGoogleToken.js";
+import ApiError from "../../../utils/ApiError.js";
+import userHelper from "../../../helpers/user.helper.js";
 
 // UserService class for login, logout, register and other user related things
 class UserService {
@@ -105,6 +105,15 @@ class UserService {
     return { userData: userWithoutSensitiveData, accessToken, refreshToken };
   }
 
+  /**
+   * This method is responsible for verifying user that the current user is valid or not.
+   * @param {TokenPayloadTypes} 
+  _id: string;  // User ID
+  email: string;  // User email
+  iat: number;    // Issued at (timestamp)
+  exp: number;    // Expiration time (timestamp)
+   * @returns  {Promise<userTypes>} - user public data
+   */
   async verifyUser(decoded: TokenPayloadTypes): Promise<userTypes> {
     // get the userData form the cache
     const isThereisUserData: userTypes | null =
@@ -131,12 +140,14 @@ class UserService {
       }
     }
 
-    if (!userData) throw new ApiError(404, "User not found");
+    // If user not found then we declared an-authorized
+    if (!userData) throw new ApiError(401, "You are not allowed to visit this page.");
 
     // return the data to the controller
     return userData;
   }
 
+  
   async generateAnotherRefreshTokenAndAccessTokenAndChangeTheDatabaseRefreshToken(
     userId: string | undefined,
     refreshTokenFromClient: string,
@@ -150,11 +161,12 @@ class UserService {
 
     const currentUser = await User.findById(userId).select("-password");
     if (!currentUser) {
-      throw new ApiError(404, "User not found");
+      // If user is not avaialble on the database then we decleared the 401 status code
+      throw new ApiError(401, "User not found");
     }
 
     if (!currentUser.refreshToken || currentUser.refreshToken.trim() === "") {
-      throw new ApiError(401, "You are authorized to perform this action");
+      throw new ApiError(401, "You are not authorized to perform this action");
     }
 
     // compare database refreshToken and client token
@@ -197,7 +209,7 @@ class UserService {
    * Logs out the user by clearing their refresh token.
    * @param userId - The ID of the user to log out.
    */
-  async logoutUser(userId: string): Promise<void> {
+  async logoutUser(userId?: string): Promise<void> {
     if (!userId || userId.trim() === "") {
       console.error("No userId found");
 
@@ -222,104 +234,111 @@ class UserService {
 
 
   /**
- * Updates and stores important user profile details in the database.
- *
- * This method follows these steps:
- *
- * 1. Validates the input payload to ensure required fields are present:
- *    - userId, age, country, and gender are mandatory.
- *    - phoneNumber and relationShipStatus are optional but included if provided.
- *
- * 2. Retrieves the user by the given userId.
- *    - If the user is not found, throws a 404 error.
- *
- * 3. Updates the user document with the provided details.
- *    - age, country, and gender are always updated.
- *    - phoneNumber and relationShipStatus are conditionally updated if provided and non-empty.
- *
- * 4. Saves the updated user document to the database.
- *
- * 5. Re-fetches the updated user, excluding sensitive fields (e.g., password, refreshToken).
- *    - Ensures the returned data is safe and clean.
- *
- * 6. Caches the updated user data by userId.
- *    - Helps optimize future lookups by reducing database queries.
- *
- * 7. Returns a structured object containing only the important details needed on the frontend or client.
- *
- * @param userImportantDetails - Object containing user's age, country, gender, optional phone number,
- *                               and relationship status along with userId.
- * @returns A Promise that resolves to the updated user important details or throws an error.
- *
- * @throws ApiError if input is invalid, user is not found, or database update fails.
- */
+   * Updates user profile details with only provided fields.
+   *
+   * Allows partial updates — users can update one or more fields without
+   * sending all required fields every time.
+   *
+   * Steps:
+   * 1. Validate `userId` presence (mandatory).
+   * 2. Fetch user by `userId`.
+   * 3. If `userName` provided, check uniqueness (throws error if taken).
+   * 4. For each field in the input, update the user document **only if provided and valid**.
+   * 5. Save updated user.
+   * 6. Return sanitized updated user details.
+   *
+   * @param userImportantDetails Partial user info with userId.
+   * @returns Updated user important details.
+   * @throws ApiError if user not found or username conflict.
+   */
   async addUserImportantDetails(
-    userImportantDetails: UserImpDetails,
+    userImportantDetails: Partial<UserImpDetails> & { userId: string | undefined },
   ): Promise<UserImpDetails | null> {
-    // 1. Validate input payload
     if (!userImportantDetails) {
       throw new ApiError(400, "Request body is required");
     }
-    const { userId, age, country, gender, phoneNumber, relationshipStatus } = userImportantDetails;
+
+    const {
+      userId,
+      age,
+      country,
+      gender,
+      phoneNumber,
+      relationshipStatus,
+      userName,
+    } = userImportantDetails;
+
     if (!userId) {
       throw new ApiError(400, "userId is required");
     }
-    if (age == null) {
-      throw new ApiError(400, "age is required");
-    }
-    if (!country) {
-      throw new ApiError(400, "country is required");
-    }
-    if (!gender) {
-      throw new ApiError(400, "gender is required");
-    }
 
-    // 2. Fetch the user
+    // Fetch user
     const user = await User.findById(userId);
     if (!user) {
       throw new ApiError(404, "User not found");
     }
 
-    // 3. Apply all updates at once
-    user.age = age;
-    user.country = country;
-    user.gender = gender.toLowerCase();
-
-    if (relationshipStatus && relationshipStatus.trim() != "") {
-      // If there is relationship status send by the user then saved to the database
-      user.relationShipStatus = relationshipStatus;
+    // Check username uniqueness if username is provided and different
+    if (userName && userName.trim() !== "" && userName !== user.userName) {
+      const existingUser = await User.findOne({ userName });
+      if (existingUser) {
+        throw new ApiError(400, "User name already exists");
+      }
+      user.userName = userName.trim();
     }
 
-    if (phoneNumber && phoneNumber.trim() != "") {
-      // If there is phoneNumber sent by user then saved to the database
-      user.phoneNumber = phoneNumber;
+    // Update fields only if they are defined and valid
+    if (age !== undefined && age !== null) {
+      if (Number(age) < 18 || Number(age) > 100) {
+        // Validate the age
+        throw new ApiError(400, "Age must be between 18 and 100");
+      }
+      user.age = age;
     }
 
-    // Save the user 
+    if (country && country.trim() !== "") {
+      user.country = country.trim();
+    }
+
+    if (gender && gender.trim() !== "") {
+      user.gender = gender.trim();
+    }
+
+    if (relationshipStatus && relationshipStatus.trim() !== "") {
+      user.relationShipStatus = relationshipStatus.trim();
+    }
+
+    if (phoneNumber && phoneNumber.trim() !== "") {
+      user.phoneNumber = phoneNumber.trim();
+    }
+
+    // Save user with updated fields
     await user.save();
 
-    // 4. Retrieve the updated document (excluding sensitive fields)
+    // Retrieve updated user without sensitive info
     const updated = await User.findById(userId)
       .select("-password -refreshToken")
       .lean<userTypes>();
+
     if (!updated) {
       throw new ApiError(500, "Failed to retrieve updated user data");
     }
 
-    // 5. Cache it
+    // Cache updated user
     await userHelper.cacheTheUserDataById(userId, JSON.stringify(updated));
 
-    // 6. Return just the important details
-    const result: UserImpDetails = {
+    // Return updated important details (fallbacks if missing)
+    return {
+      userId,
       age: Number(updated.age),
-      country: updated.country!,
-      gender: updated.gender!,
-      relationshipStatus: updated.relationShipStatus ? updated.relationShipStatus : "Not-specified",
-      phoneNumber: updated.phoneNumber ? updated.phoneNumber : "Not-provided",
-      userId, // Optional
+      country: updated.country || "Not specified",
+      gender: updated.gender || "Not specified",
+      relationshipStatus: updated.relationShipStatus || "Not specified",
+      phoneNumber: updated.phoneNumber || "Not provided",
+      userName: updated.userName || "Not provided",
     };
-    return result;
   }
+
 }
 
 // Create an instance of the UserService

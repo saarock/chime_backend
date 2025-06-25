@@ -1,6 +1,6 @@
-import ApiError from "../../utils/ApiError.js";
-import type { Feedback } from "../../types/index.js";
-import FeedbackModel from "../../models/FeedBack.model.js";
+import ApiError from "../../../utils/ApiError.js";
+import type { Feedback } from "../../../types/index.js";
+import FeedbackModel from "../../../models/FeedBack.model.js";
 
 class FeedBackService {
   async saveFeedBack(userFeedBack: Feedback) {
@@ -53,7 +53,7 @@ class FeedBackService {
       ...userFeedBack,
     });
 
-    return newFeedback;
+    return;
   }
 }
 

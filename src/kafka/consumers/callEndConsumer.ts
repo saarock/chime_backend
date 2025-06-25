@@ -1,6 +1,6 @@
 import { createConsumer } from "./baseConsumer.js";
 import { LOGS_BATCH_SIZE, FLUSH_INTERVAL_MS } from "../../constant.js";
-import callLogService from "../../services/databaseService/CallLog.service.js";
+import callLogService from "../../services/databaseService/api/CallLog.service.js";
 
 const callBuffer: any[] = [];
 

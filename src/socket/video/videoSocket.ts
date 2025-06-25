@@ -153,7 +153,7 @@ class VideoSocket {
 
     const userId = socket.data.user._id;
 
-    // At the start of handleConnection:
+    // At the start of handleConnection: Detect the duplicate connection and disconnect the old one 
     await this.disconnectPreviousIfExists(userId);
 
     // Cache this socket in Redis for lookups
@@ -162,6 +162,7 @@ class VideoSocket {
     // Handle random video call initiation
     socket.on("start:random-video-call", async ({ userDetails }) => {
       try {
+        console.log("starting the random video call");
         const isInCall = await this.activeCalls.getPartner(userId);
         if (isInCall) return;
         await this.findRandomUser(socket, userId, userDetails);
@@ -184,6 +185,8 @@ class VideoSocket {
 
     // Broadcast online user count on request
     socket.on("onlineUsersCount", async () => {
+      console.log("Online user count is ");
+      
       const count = await this.getOnlineUserCountSomehow();
       socket.emit("onlineUsersCount", { count });
       socket.broadcast.emit("onlineUsersCount", { count });
