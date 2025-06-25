@@ -1,7 +1,7 @@
 
 // Import all the necessary dependencies here
-import { feedBackService } from "../services/databaseService/index.js";
-import { ApiResponse, asyncHandler } from "../utils/index.js";
+import { feedBackService } from "../../services/databaseService/api/index.js";
+import { ApiResponse, asyncHandler } from "../../utils/index.js";
 
 
 // Feedback controller

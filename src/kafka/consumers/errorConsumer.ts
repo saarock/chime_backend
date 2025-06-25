@@ -1,5 +1,5 @@
 import { createConsumer } from "./baseConsumer.js";
-import errorService from "../../services/databaseService/Error.service.js";
+import errorService from "../../services/databaseService/api/Error.service.js";
 import { ERRORS_BATCH_SIZE, FLUSH_INTERVAL_MS } from "../../constant.js";
 
 const errorBuffer: any[] = [];

@@ -1,4 +1,4 @@
-import { saveFeedBack } from "../controllers/feedBack.controller.js";
+import { saveFeedBack } from "../../controllers/api/feedBack.controller.js";
 import { Router } from "express";
 
 const feedBackRouter = Router();

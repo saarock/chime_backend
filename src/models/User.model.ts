@@ -40,11 +40,11 @@ const userSchema = new Schema(
     },
     age: {
       type: Number,
-      min: [14, "Age must be 18 or above"],
+      min: [18, "Age must be 18 or above"],
     },
     gender: {
       type: String,
-      enum: ["male", "female", "other"],
+      enum: ["Male", "Female", "Other"],
     },
 
     relationShipStatus: {
@@ -61,7 +61,7 @@ const userSchema = new Schema(
     role: {
       type: String,
       default: "user",
-      required: [true, "role is reqruied!"],
+      required: [true, "role is required!"],
       enum: ["user", "admin"],
     },
     country: {
@@ -115,6 +115,7 @@ userSchema.methods.generateAccessToken = async function () {
       _id: this._id,
       email: this.email,
       fullName: this.fullName,
+      role: this.role,
     },
     secret,
     {

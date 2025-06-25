@@ -1,13 +1,32 @@
 // Import all the necessary dependencies here
 import dotenv from "dotenv";
-// config the dotenv
-dotenv.config();
-
+import path from "path";
+import { fileURLToPath } from "url";
 import cookieParser from "cookie-parser";
 import express from "express";
 import cors from "cors";
+import expressEjsLayouts from "express-ejs-layouts";
+
+// config the dotenv
+dotenv.config();
+
 
 const app = express();
+
+// Equivalent to __filename and __dirname in ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+
+// Set up EJS 
+app.set("view engine", "ejs");
+app.set("views", path.join(__dirname, "views"));
+
+// Enables layout
+app.use(expressEjsLayouts);
+app.set("layout", "layouts/master");
+
+
 
 // app configuration
 app.use(
@@ -35,9 +54,15 @@ app.use(express.static("public"));
  * Node secutiry
  */
 
-// Routers
-import { feedBackRouter, userRouter } from "./routes/index.js";
+// Api Routers
+import { feedBackRouter, userRouter } from "./routes/api/index.js";
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/users", feedBackRouter);
+
+// Admin routers
+import { dashBoardRoute } from "./routes/admin/index.js";
+app.use("/admin/", dashBoardRoute);
+
+
 
 export default app;

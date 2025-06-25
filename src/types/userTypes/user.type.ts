@@ -77,9 +77,10 @@ export interface UserImpDetails {
   age: number;                 // Age (must be >=13 and <=120)
   country: string;            // Country name
   gender: string;             // Gender as string (validated against enum on backend)
-  userId: string;             // Associated user ID
+  userId?: string;             // Associated user ID
   relationshipStatus?: string; // Optional relationship status
   phoneNumber?: string;       // Optional phone number
+  userName: string;
 }
 
 /**
