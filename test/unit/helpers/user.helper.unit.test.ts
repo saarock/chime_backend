@@ -55,9 +55,6 @@ describe("User service test", () => {
   });
 
   it("should generate the access and refresh token and cache in the redis", async () => {
-    const userId = "fasdngjsdbgahsdgbsdg";
-    const data = { fullName: "Aayush Banset", userName: "saarock" };
-
     const user = await User.create({
       fullName: "Aayush Basnet",
       email: "saarock4646@gmail.com",

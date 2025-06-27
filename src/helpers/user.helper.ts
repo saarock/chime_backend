@@ -1,4 +1,4 @@
-// Imports
+// Import all the necessary dependencies here
 import { client } from "../configs/index.js";
 import { User } from "../models/index.js";
 import type { User as userTypes } from "../types/index.js";

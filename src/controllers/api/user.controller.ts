@@ -61,7 +61,7 @@ export const loginFromTheGoogle = asyncHandler(async (req, res, _) => {
  * ----------
  * Verifies the authenticated user based on JWT payload (set by middleware).
  */
-export const verifyUser = asyncHandler(async (req, res, _) => {
+export const verifyUser = asyncHandler(async (req, res, _) => {  
   const userData = await userService.verifyUser(req.user as TokenPayloadTypes);
   return res
     .status(200)

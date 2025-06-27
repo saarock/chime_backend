@@ -24,7 +24,7 @@ const forceLogoutIfAnyUserDetailChange = asyncHandler(
     // Find user in the database
     const user = await User.findById(userId).select("refreshToken role");
 
-    console.log(user.refreshToken);
+    console.log(user.refreshToken  + ' this is the refreshToken');
     
     // If user not found or forcibly logged out (refreshToken removed), reject the request
     if (!user || !user.refreshToken || user.refreshToken.trim() === "") {

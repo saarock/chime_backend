@@ -21,7 +21,7 @@ export const verifyJWT = asyncHandler(
     // Get the accessToken from the user request
     const token = req.cookies.accessToken;
 
-    console.log(token);
+    console.log(token + " this is the access token");
 
 
     // Check that token is available or not
