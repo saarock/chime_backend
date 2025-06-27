@@ -1,6 +1,5 @@
 // src/types/usersTypes/user.type.ts
 // Define all user-related TypeScript types and interfaces used across the application
-
 import type { Document } from "mongoose";
 
 /**

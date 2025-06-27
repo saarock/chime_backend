@@ -2,7 +2,7 @@
 import { fisherShuffle } from "../../utils/fisherShuffle.js";
 import { videoClient } from "../../configs/redis.js";
 import { redisLock, RedisLockKeyStore } from "./index.js";
-import type { Filters, UserDetails, UserMetaData } from "../../types/index.js";
+import type { UserDetails, UserMetaData } from "../../types/index.js";
 
 /**
  * VideoCallUserQueue handles matchmaking and user session coordination for video calls.
@@ -189,12 +189,12 @@ export default class VideoCallUserQueue {
     }
 
     if (!candidates || candidates.length === 0) return null;
-    const otherCandidates = candidates.filter((id:string) => id !== userId);
+    const otherCandidates = candidates.filter((id: string) => id !== userId);
     return otherCandidates.length > 0 ? otherCandidates[0] : null;
   }
 
   /** Try to find a match from opposite gender pool by country if previous method fails */
-  private static async findByCountryAndOppositeGender(
+  private static async findByCountryAndOppositeGenderWithAnyAgeRange(
     gender: string,
     country: string,
     userId: string,
@@ -212,12 +212,12 @@ export default class VideoCallUserQueue {
     }
 
     if (!candidates || candidates.length === 0) return null;
-    const filtered = candidates.filter((id:string) => id !== userId);
+    const filtered = candidates.filter((id: string) => id !== userId);
     return filtered.length > 0 ? filtered[0] : null;
   }
 
   /** Try to find a match from the same gender and country (used when opposite gender fails) */
-  private static async findByCountryAndRelatedGender(
+  private static async findByCountryAndRelatedGenderWithAnyRange(
     gender: string,
     country: string,
     userId: string,
@@ -235,7 +235,7 @@ export default class VideoCallUserQueue {
     }
 
     if (!candidates || candidates.length === 0) return null;
-    const filtered = candidates.filter((id:string) => id !== userId);
+    const filtered = candidates.filter((id: string) => id !== userId);
     return filtered.length > 0 ? filtered[0] : null;
   }
 
@@ -249,7 +249,7 @@ export default class VideoCallUserQueue {
     const key = `waiting:${gender}:user:${gender}:${ageRange}:${country}`;
     const candidates = await videoClient.zRange(key, 0, 1);
     if (!candidates || candidates.length === 0) return null;
-    const filtered = candidates.filter((id:  string) => id !== userId);
+    const filtered = candidates.filter((id: string) => id !== userId);
     return filtered.length > 0 ? filtered[0] : null;
   }
 
@@ -304,25 +304,34 @@ export default class VideoCallUserQueue {
     const ageRange = this.getAgeRange(String(age));
     const normalizedCountry = this.normalizeAttr(country);
 
+
+    // First the algorithm try to find the candidate from the same country within the same age range but the gender is opposite if the gender is male then goes to find the female 
+    // If the gender is female then male.
     let candidateId = await this.findOppositeGenderCandidateId(gender || "any", ageRange, normalizedCountry, userId);
 
     if (!candidateId) {
+      // If not found then again try to find from the same the same country , same age range and same gender
       candidateId = await this.findRelatedGenderCandidateId(gender || "any", ageRange, normalizedCountry, userId);
     }
 
     if (!candidateId) {
-      candidateId = await this.findByCountryAndOppositeGender(gender || "any", normalizedCountry, userId);
+      // If  not found then again try to find from the same country and opposite gender and with any age-range
+      candidateId = await this.findByCountryAndOppositeGenderWithAnyAgeRange(gender || "any", normalizedCountry, userId);
     }
 
     if (!candidateId) {
-      candidateId = await this.findByCountryAndRelatedGender(gender || "any", normalizedCountry, userId);
+      // If not found till then again try to find by same country, same gender and any age range
+      candidateId = await this.findByCountryAndRelatedGenderWithAnyRange(gender || "any", normalizedCountry, userId);
     }
 
     if (!candidateId) {
+      // if not found till now this is the last second last state of the algorithm so try to find the candidate from the findFallback queue [@note if there are users in the queue then this method should 100% find the candidate]
       candidateId = await this.findFallbackMatch(userId);
     }
 
     if (candidateId) {
+      // Always finalized the match because this is helps to lock the user and also  check the candidate is locked by some one or not which helps from the rance-condition 
+      // Basically this is the lock system made by myself using the redis which only works on this server only
       const finalized = await this.finalizeMatch(userId, candidateId);
       return finalized;
     }

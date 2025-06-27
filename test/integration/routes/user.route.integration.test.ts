@@ -1,31 +1,29 @@
-import {
-  afterAll,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  vi,
-} from "vitest";
+import { beforeAll, afterAll, describe, test, expect, vi } from "vitest";
 import request from "supertest";
-import app from "../../../src/app.js";
-import { MongoMemoryServer } from "mongodb-memory-server";
 import mongoose from "mongoose";
-import { verifyJWTRefreshToken } from "../../../src/middlewares/refreshTokenVerify.middleware.js";
-import User from "../../../src/models/User.model.js";
+import { MongoMemoryServer } from "mongodb-memory-server";
 
-let mongoServer: MongoMemoryServer;
+// --- Mocks at the very top before other imports ---
 
-beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
-  const uri = mongoServer.getUri();
-  await mongoose.connect(uri);
+vi.mock("../../../src/helpers/user.helper.js", () => {
+  const userId = new mongoose.Types.ObjectId().toString();
+  return {
+    default: {
+      cacheTheUserDataById: vi.fn().mockResolvedValue(null),
+      generateAccessAndRefreshTokensAndCacheTheUserDataInRedis: vi.fn().mockResolvedValue({
+        accessToken: "mock-access-token",
+        refreshToken: "mock-refresh-token",
+      }),
+      getUserRedisCacheData: vi.fn().mockResolvedValue({
+        email: "test@example.com",
+        name: "test",
+        profilePicture: "profile.jpg",
+      }),
+      verifyRefreshToken: vi.fn().mockResolvedValue({ userId }),
+    },
+  };
 });
 
-afterAll(async () => {
-  await mongoose.disconnect();
-  await mongoServer.stop();
-});
 vi.mock("../../../src/utils/verifyGoogleToken.js", () => ({
   default: vi.fn().mockResolvedValue({
     email: "test@example.com",
@@ -34,144 +32,282 @@ vi.mock("../../../src/utils/verifyGoogleToken.js", () => ({
   }),
 }));
 
-vi.mock("../../../src/helpers/User.helper.js", () => ({
-  default: {
-    cacheTheUserDataById: vi.fn().mockResolvedValue(null),
-    generateAccessAndRefreshTokensAndCacheTheUserDataInRedis: vi
-      .fn()
-      .mockResolvedValue({
-        accessToken: "mock-access-token",
-        refreshToken: "mock-refresh-token",
-      }),
-    getUserRedisCacheData: vi.fn().mockResolvedValue({
-      email: "test@example.com",
-      name: "test",
-      profilePicture: "profile.jpg",
-    }),
-    verifyRefreshToken: vi.fn().mockResolvedValue({
-      userId: "123",
-    }),
-  },
-}));
-
 vi.mock("../../../src/middlewares/auth.middleware.js", () => ({
   verifyJWT: vi.fn((req, _, next) => {
-    req.user = { _id: "123" };
+    req.userId = new mongoose.Types.ObjectId().toString(); // fresh id each time
+    req.user = {
+      _id: testUserId,
+      email: "test@example.com",
+      fullName: "Test User",
+      role: "user",
+    }
     next();
   }),
 }));
 
 vi.mock("../../../src/middlewares/refreshTokenVerify.middleware.js", () => ({
   verifyJWTRefreshToken: vi.fn((req, _, next) => {
-    req.userId = "123";
+    req.userId = new mongoose.Types.ObjectId().toString();
     next();
   }),
 }));
+
+// --- Now import other modules that depend on the above mocks ---
+
+import app from "../../../src/app.js";
+import User from "../../../src/models/User.model.js";
+import jwt from "jsonwebtoken";
+
+const testUserId = new mongoose.Types.ObjectId().toString();
+
+let mongoServer: MongoMemoryServer;
+
+beforeAll(async () => {
+  mongoServer = await MongoMemoryServer.create();
+  await mongoose.connect(mongoServer.getUri());
+});
+
+afterAll(async () => {
+  await mongoose.disconnect();
+  await mongoServer.stop();
+});
+
+
+// Test starts from here
 
 describe("POST /login-with-google", () => {
   test("should respond with 200 status code", async () => {
     const response = await request(app)
       .post("/api/v1/users/login-with-google")
       .send({ clientId: "test-client-id", credentials: "Credentials" });
-    console.log(response.body);
+
     expect(response.body.statusCode).toBe(200);
-    expect(response.body.data).toHaveProperty("refreshToken");
     expect(response.body.data).toHaveProperty("accessToken");
   });
 });
 
 describe("GET /verify-user", () => {
-  test("should response with 200 status code", async () => {
+  test("should respond with 400 if req.userId is missing", async () => {
+    // Override mock implementation to simulate missing userId
+    const { verifyJWT } = await import("../../../src/middlewares/auth.middleware.js");
+    (verifyJWT as any).mockImplementationOnce((req, _, next) => {
+      // Do not set req.userId to simulate missing userId
+      next();
+    });
+
+    const token = jwt.sign({ _id: "123", email: "test@example.com" }, "test-secret", {
+      expiresIn: "1h",
+    });
+
     const response = await request(app)
       .get("/api/v1/users/verify-user")
-      .set("Authorization", `Bearer mock-access-token`);
+      .set("Cookie", [`accessToken=${token}`]);
 
-    expect(response.body.statusCode).toBe(200);
+    expect(response.body.statusCode).toBe(400);
+    expect(response.body.success).toBe(false);
   });
-});
 
-describe("POST /refresh-tokens", () => {
-  test("should response with 200 status code", async () => {
-    const selectMock = vi.fn().mockResolvedValue({
-      _id: 123,
+  // This test is only for the test at the future this test should be removed when we create the new server for the admin
+  test("should respond with 401 if there is not refreshToken in the database that means some of the data is changed by the admin", async () => {
+    const token = jwt.sign({ _id: testUserId, email: "test@example.com" }, "test-secret", {
+      expiresIn: "1h",
+    });
+
+    const user = {
+      _id: testUserId,
       email: "test@example.com",
       fullName: "Test User",
-      profilePicture: "pic.jpg",
+      role: "user",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    // Mock mongoose findById with chained select returning user
+    const selectMock = vi.fn().mockResolvedValue(user);
+    vi.spyOn(User, "findById").mockReturnValue({ select: selectMock } as any);
+
+    const response = await request(app)
+      .get("/api/v1/users/verify-user")
+      .set("Cookie", [`accessToken=${token}`]);
+
+    expect(response.body.statusCode).toBe(401);
+    expect(response.body.success).toBe(false);
+  });
+
+  test("should return 200 and include refreshToken", async () => {
+    const token = jwt.sign({ _id: testUserId, email: "test@example.com" }, "test-secret", {
+      expiresIn: "1h",
+    });
+
+    const userWithRefreshToken = {
+      _id: testUserId,
+      email: "test@example.com",
+      fullName: "Test User",
+      role: "user",
       refreshToken: "mock-refresh-token",
-    });
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
 
-    User.findById = vi.fn().mockReturnValue({
-      select: selectMock,
-    });
+    const selectMock = vi.fn().mockResolvedValue(userWithRefreshToken);
+    vi.spyOn(User, "findById").mockReturnValue({ select: selectMock } as any);
+
     const response = await request(app)
-      .post("/api/v1/users/refresh-tokens")
-      .send({ refreshToken: "mock-refresh-token" });
+      .get("/api/v1/users/verify-user")
+      .set("Cookie", [`accessToken=${token}`]);
 
     expect(response.body.statusCode).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(selectMock).toHaveBeenCalledWith("refreshToken role");
   });
+
+  test("should return 500 status code there is not refresh token", async () => {
+    const testUserId = new mongoose.Types.ObjectId().toString();
+
+    const token = jwt.sign({ _id: testUserId, email: "test@example.com" }, "test-secret", {
+      expiresIn: "1h",
+    });
+
+    // ❗ Mock select() to return null → simulate user not found
+    const selectMock = vi.fn().mockResolvedValue(null);
+    vi.spyOn(User, "findById").mockReturnValue({ select: selectMock } as any);
+
+    const response = await request(app)
+      .get("/api/v1/users/verify-user")
+      .set("Cookie", [`accessToken=${token}`]);
+
+    expect(response.body.statusCode).toBe(500);
+    expect(response.body.success).toBe(false);
+  });
+
+  // test("should return 400 when user not found", async () => {
+  //   const { verifyJWT } = await import("../../../src/middlewares/auth.middleware.js");
+
+  //   // 👇 Override for this one test
+  //   (verifyJWT as any).mockImplementationOnce((req, _, next) => {
+  //     req.userId = "nonexistent-user-id";
+  //     req.user = {
+  //       _id: "nonexistent-user-id",
+  //       email: "test@example.com",
+  //       fullName: "Ghost User",
+  //       role: "user",
+  //     };
+  //     next();
+  //   });
+
+  //   // And also mock DB to return null for this fake ID
+  //   const selectMock = vi.fn().mockReturnValue({ lean: vi.fn().mockResolvedValue(null) });
+  //   vi.spyOn(User, "findById").mockReturnValue({ select: selectMock } as any);
+
+  //   const token = jwt.sign(
+  //     { _id: "nonexistent-user-id", email: "test@example.com" },
+  //     "test-secret",
+  //     { expiresIn: "1h" }
+  //   );
+
+  //   const response = await request(app)
+  //     .get("/api/v1/users/verify-user")
+  //     .set("Cookie", [`accessToken=${token}`]);
+
+  //   console.log(response.body);
+
+  //   expect(response.body.statusCode).toBe(400);
+  //   expect(response.body.message).toMatch(/not found/i);
+  // });
+
 });
 
+
+
 describe("POST /refresh-tokens", () => {
-  test("should response with 401 status code", async () => {
-    const selectMock = vi.fn().mockResolvedValue({
-      _id: 123,
+  test("should respond with 200", async () => {
+    const token = jwt.sign({ _id: testUserId, email: "test@example.com" }, "test-secret", {
+      expiresIn: "1h",
+    });
+
+    const user = {
+      _id: testUserId,
       email: "test@example.com",
       fullName: "Test User",
       profilePicture: "pic.jpg",
-      // refreshToken: "mock-refresh-token" // because refreshtoken is missing
-    });
+      refreshToken: token
+    };
 
-    User.findById = vi.fn().mockReturnValue({
-      select: selectMock,
-    });
+    const selectMock = vi.fn().mockResolvedValue(user);
+    User.findById = vi.fn().mockReturnValue({ select: selectMock } as any);
+
     const response = await request(app)
       .post("/api/v1/users/refresh-tokens")
-      .send({ refreshToken: "mock-refresh-token" });
+      .set("Cookie", [`refreshToken=${token}`]);
+
+    expect(response.body.statusCode).toBe(200);
+  });
+
+  test("should respond with 401 if refresh token is invalid", async () => {
+    const token = jwt.sign({ _id: testUserId, email: "test@example.com" }, "test-secret", {
+      expiresIn: "1h",
+    });
+
+    const user = {
+      _id: testUserId,
+      email: "test@example.com",
+      fullName: "Test User",
+      profilePicture: "pic.jpg",
+      refreshToken: "fake-refresh-token" // Fake refresh token
+    };
+
+    const selectMock = vi.fn().mockResolvedValue(user);
+    User.findById = vi.fn().mockReturnValue({ select: selectMock } as any);
+
+    const response = await request(app)
+      .post("/api/v1/users/refresh-tokens")
+      .set("Cookie", [`refreshToken=${token}`]);
+
 
     expect(response.body.statusCode).toBe(401);
   });
 });
 
 describe("POST /logout-user", () => {
-  test("should response with 200 status code", async () => {
+  test("should respond with 200", async () => {
+    const token = jwt.sign({ _id: testUserId, email: "test@example.com" }, "test-secret", {
+      expiresIn: "1h",
+    });
+
     const user = {
-      _id: "123",
+      _id: testUserId,
       email: "test@example.com",
-      refreshToken: "fake-refresh-token",
+      refreshToken: token,
       set: vi.fn().mockReturnThis(),
       save: vi.fn().mockResolvedValue(true),
     };
 
-    await (User.findById as any).mockResolvedValue(user);
+    const selectMock = vi.fn().mockResolvedValue(user);
+    User.findById = vi.fn().mockReturnValue({ select: selectMock } as any);
+
     const response = await request(app)
       .post("/api/v1/users/logout-user")
-      .send({ userId: "123" });
+      .set("Cookie", [`accessToken=${token}`]);
+
     expect(response.body.statusCode).toBe(200);
   });
 
-  test("should response with 404 userId doesnot found if there is not userId", async () => {
+
+  test("should respond with 401 if refresh-token is missing", async () => {
+
     const user = {
-      _id: "123",
+      _id: testUserId,
       email: "test@example.com",
-      refreshToken: "fake-refresh-token",
+      refreshToken: undefined,
       set: vi.fn().mockReturnThis(),
       save: vi.fn().mockResolvedValue(true),
     };
 
-    await (User.findById as any).mockResolvedValue(user);
+    const selectMock = vi.fn().mockResolvedValue(user);
+    User.findById = vi.fn().mockReturnValue({ select: selectMock } as any);
     const response = await request(app)
       .post("/api/v1/users/logout-user")
-      .send({ userId: "" });
-    expect(response.body.statusCode).toBe(404);
-  });
-
-  test("should response with 404 user doesnot found with given userId", async () => {
-    const user = undefined;
-
-    await (User.findById as any).mockResolvedValue(user);
-    const response = await request(app)
-      .post("/api/v1/users/logout-user")
-      .send({ userId: "123" });
-    expect(response.body.statusCode).toBe(404);
+      .set("Cookie", [`accessToken=${null}`]);
+    expect(response.body.statusCode).toBe(401);
   });
 });

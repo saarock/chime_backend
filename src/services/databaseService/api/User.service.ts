@@ -115,6 +115,8 @@ class UserService {
    * @returns  {Promise<userTypes>} - user public data
    */
   async verifyUser(decoded: TokenPayloadTypes): Promise<userTypes> {
+    console.log(decoded + " this is the deocode id ");
+
     // get the userData form the cache
     const isThereisUserData: userTypes | null =
       await this.userHelper.getUserRedisCacheData(decoded._id);
@@ -147,7 +149,7 @@ class UserService {
     return userData;
   }
 
-  
+
   async generateAnotherRefreshTokenAndAccessTokenAndChangeTheDatabaseRefreshToken(
     userId: string | undefined,
     refreshTokenFromClient: string,
@@ -215,19 +217,20 @@ class UserService {
 
       throw new ApiError(404, "userId doesnot found");
     }
-    const user = await User.findById(userId);
+    const user = await User.findById(userId).select('refreshToken');
 
     if (!user) {
       console.error("No user found with given user id");
-
       throw new ApiError(404, "User not found");
     }
+        
     // Optional: Check if refreshToken exists before clearing
     if (user.refreshToken) {
       user.set("refreshToken", undefined, { strict: false });
       await user.save({ validateBeforeSave: false });
+      return;
     } else {
-      throw new ApiError(400, "User is already logged out");
+      throw new ApiError(400, "User is already logged out.");
     }
   }
 
