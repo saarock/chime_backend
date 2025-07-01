@@ -94,8 +94,8 @@ export default class VideoCallUserQueue {
     const EXPIRY_SECONDS = 30; // Entry TTL to prevent orphaned sessions
 
     // Normalize and extract fields
-    const country = this.normalizeAttr(userDetails.country);
-    const gender = this.normalizeAttr(userDetails.gender);
+    const country = this.normalizeAttr(userDetails.country) || "any";
+    const gender = this.normalizeAttr(userDetails.gender) || "any";
     const age = userDetails.age !== undefined && userDetails.age !== null
       ? String(userDetails.age).trim().toLowerCase()
       : "any";

@@ -90,3 +90,13 @@ export interface UserCallLogs {
   calleeId: string;   // ID of the user who received the call
   callTime: string;   // Call duration or timestamp, depending on usage
 }
+
+
+/**
+ * User Report Info
+ */
+export type ReportType = "like" | "dislike"
+export interface Report {
+  reportedUserId: string; // Partner id for report
+  type: ReportType; // Type like or dislike
+}

@@ -61,7 +61,7 @@ export const loginFromTheGoogle = asyncHandler(async (req, res, _) => {
  * ----------
  * Verifies the authenticated user based on JWT payload (set by middleware).
  */
-export const verifyUser = asyncHandler(async (req, res, _) => {  
+export const verifyUser = asyncHandler(async (req, res, _) => {
   const userData = await userService.verifyUser(req.user as TokenPayloadTypes);
   return res
     .status(200)
@@ -127,22 +127,39 @@ export const logOutUser = asyncHandler(async (req, res, _) => {
  * Adds or updates additional user details (e.g., age, country, gender)
  * after login or registration.
  */
-export const addUserImportantData = asyncHandler(async (req, res, _) => {
-
+export const addUserImportantData = asyncHandler(async (req, res) => {
   const userId = req.userId;
-  const { age, country, gender, relationshipStatus, phoneNumber, userName } = req.body;
-
-  const userUpdateImportantDetails = await userService.addUserImportantDetails({
-    age,
-    country,
-    gender,
+  const details = {
+    ...req.body,
     userId,
-    relationshipStatus,
-    phoneNumber,
-    userName
-  });
+  };
+
+  const updatedUser = await userService.addUserImportantDetails(details);
 
   return res
     .status(200)
-    .json(new ApiResponse(200, userUpdateImportantDetails, "Details updated"));
+    .json(new ApiResponse(200, updatedUser, "Details updated"));
 });
+
+/**
+ * This controller fuction is responsible for repor
+ * 
+ */
+export const likeDislike = asyncHandler(async (req, res) => {
+  const userId = req.userId;
+  const { reportedUserId, type } = req.body;
+  await userService.reportUser(userId, { reportedUserId, type });
+  // Generate dynamic message
+  const actionMessage =
+    type === "like"
+      ? "Thank you! You've liked the user successfully."
+      : "Your report has been submitted. Our team will review it shortly.";
+
+  // Respond to client
+  return res.status(200).json(
+    new ApiResponse(200, { message: actionMessage }, "Report processed successfully.")
+  );
+
+});
+
+

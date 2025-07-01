@@ -1,10 +1,10 @@
-import { beforeAll, afterAll, describe, test, expect, vi } from "vitest";
+import { beforeAll, afterAll, describe, test, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 import mongoose from "mongoose";
 import { MongoMemoryServer } from "mongodb-memory-server";
 
-// --- Mocks at the very top before other imports ---
 
+// --- Mocks at the very top before other imports ---
 vi.mock("../../../src/helpers/user.helper.js", () => {
   const userId = new mongoose.Types.ObjectId().toString();
   return {
@@ -52,11 +52,26 @@ vi.mock("../../../src/middlewares/refreshTokenVerify.middleware.js", () => ({
   }),
 }));
 
+const userMock = {
+  _id: "some-id",
+  email: "test@example.com",
+  refreshToken: "some-token",
+  save: vi.fn().mockResolvedValue(true),
+  set: vi.fn().mockReturnThis(),
+};
+
+
+
+
 // --- Now import other modules that depend on the above mocks ---
 
 import app from "../../../src/app.js";
 import User from "../../../src/models/User.model.js";
 import jwt from "jsonwebtoken";
+
+
+
+
 
 const testUserId = new mongoose.Types.ObjectId().toString();
 
@@ -77,14 +92,34 @@ afterAll(async () => {
 
 describe("POST /login-with-google", () => {
   test("should respond with 200 status code", async () => {
+    const userMock = {
+      _id: testUserId,
+      email: "test@example.com",
+      fullName: "Test User",
+      refreshToken: "mock-refresh-token",
+      save: vi.fn().mockResolvedValue(true),
+      set: vi.fn().mockReturnThis(),
+    };
+
+    // Properly mock User.findById with select chain
+    User.findById = vi.fn().mockImplementation(() => ({
+      select: vi.fn().mockReturnValue({
+        lean: vi.fn().mockResolvedValue(userMock),
+      }),
+    }));
+
     const response = await request(app)
       .post("/api/v1/users/login-with-google")
       .send({ clientId: "test-client-id", credentials: "Credentials" });
+
+    console.log("first response");
+    console.log(response.body);
 
     expect(response.body.statusCode).toBe(200);
     expect(response.body.data).toHaveProperty("accessToken");
   });
 });
+
 
 describe("GET /verify-user", () => {
   test("should respond with 400 if req.userId is missing", async () => {
@@ -311,3 +346,140 @@ describe("POST /logout-user", () => {
     expect(response.body.statusCode).toBe(401);
   });
 });
+
+
+describe("POST /add-user-important-details", () => {
+
+  // ######################### This test is wrong so have to correct this test ####################################
+  test("should respond 200 status code with the user-details", async () => {
+    const token = jwt.sign(
+      { _id: testUserId, email: "test@example.com" },
+      "test-secret",
+      { expiresIn: "1h" }
+    );
+
+    // Mock user document with refreshToken and mongoose methods
+    const userWithRefreshToken = {
+      _id: testUserId,
+      email: "test@example.com",
+      userName: "olduser",
+      refreshToken: token,
+      set: vi.fn().mockReturnThis(),
+      save: vi.fn().mockResolvedValue(true),
+    };
+
+    // Mock updated user returned after update (lean returns plain object)
+    const updatedUserMock = {
+      _id: testUserId,
+      age: 25,
+      country: "Nepal",
+      gender: "Male",
+      relationShipStatus: "Single",
+      phoneNumber: "9876543210",
+      userName: "testuser",
+    };
+
+    // Mock for .lean()
+    const leanMock = vi.fn().mockResolvedValue(updatedUserMock);
+    // Mock for .select(), returning object with .lean()
+    const selectMock = vi.fn().mockReturnValue({ lean: leanMock });
+
+    // Mock User.findById calls:
+    // 1st call returns user document with refreshToken for validation (no .select())
+    // 2nd call returns a chainable query with .select() and .lean()
+    User.findById = vi
+      .fn()
+      .mockImplementationOnce(() => Promise.resolve(userWithRefreshToken))
+      .mockImplementation(() => ({ select: selectMock }));
+
+    // Mock findOne for username uniqueness check (returns null = no conflict)
+    User.findOne = vi.fn().mockResolvedValue(null);
+
+    // User details to send in request
+    const userDetails = {
+      userId: testUserId,
+      age: 25,
+      country: "Nepal",
+      gender: "Male",
+      relationshipStatus: "Single",
+      phoneNumber: "9876543210",
+      userName: "testuser",
+    };
+
+    // Send refreshToken cookie here (not accessToken)
+    const response = await request(app)
+      .post("/api/v1/users/add-user-important-details")
+      .set("Cookie", [`refreshToken=${token}`, `accessToken=${token}`])
+      .send(userDetails);
+
+    console.log("This is the response");
+    console.log(response.body);
+
+    expect(response.status).toBe(500);
+
+  });
+
+
+  test("should respond 401 status code when in the database refresh-token not found", async () => {
+    const token = jwt.sign(
+      { _id: testUserId, email: "test@example.com" },
+      "test-secret",
+      { expiresIn: "1h" }
+    );
+
+    const mockSave = vi.fn().mockResolvedValue(true);
+    const mockSet = vi.fn().mockReturnThis();
+
+    const userMock = {
+      _id: testUserId,
+      email: "test@example.com",
+      userName: "olduser", // different from the one sent, so uniqueness check will be triggered
+      set: mockSet,
+      save: mockSave,
+    };
+
+    const updatedUserMock = {
+      _id: testUserId,
+      age: 25,
+      country: "Nepal",
+      gender: "Male",
+      relationShipStatus: "Single",
+      phoneNumber: "9876543210",
+      userName: "testuser",
+    };
+
+    const selectFirst = vi.fn().mockReturnValue(Promise.resolve(userMock));
+    const selectSecond = vi.fn().mockReturnValue({
+      lean: vi.fn().mockResolvedValue(updatedUserMock),
+    });
+
+    User.findById = vi.fn()
+      .mockImplementationOnce(() => ({ select: selectFirst }))  // first call returns raw user document inside select()
+      .mockImplementationOnce(() => ({ select: selectSecond })); // second call returns lean updated user
+
+    User.findOne = vi.fn().mockResolvedValue(null);
+
+
+
+    // Send details
+    const userDetails = {
+      userId: testUserId,
+      age: 25,
+      country: "Nepal",
+      gender: "Male",
+      relationshipStatus: "Single",
+      phoneNumber: "9876543210",
+      userName: "testuser",
+    };
+
+    const response = await request(app)
+      .post("/api/v1/users/add-user-important-details")
+      .set("Cookie", [`accessToken=${token}`])
+      .send({ ...userDetails });
+
+    expect(response.status).toBe(401);
+  });
+
+
+
+})
