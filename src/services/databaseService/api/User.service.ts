@@ -1,11 +1,12 @@
 // src/services/User.services.ts
 import type { TokenPayload } from "google-auth-library";
-import { User } from "../../../models/index.js";
+import { User, UserReport } from "../../../models/index.js";
 import type {
   TokenPayloadTypes,
   User as userTypes,
   UserLoginWithGoogleDetails,
   UserImpDetails,
+  Report,
 } from "../../../types/index.js";
 import verifyGoogleToken from "../../../utils/verifyGoogleToken.js";
 import ApiError from "../../../utils/ApiError.js";
@@ -223,7 +224,7 @@ class UserService {
       console.error("No user found with given user id");
       throw new ApiError(404, "User not found");
     }
-        
+
     // Optional: Check if refreshToken exists before clearing
     if (user.refreshToken) {
       user.set("refreshToken", undefined, { strict: false });
@@ -314,6 +315,10 @@ class UserService {
     if (phoneNumber && phoneNumber.trim() !== "") {
       user.phoneNumber = phoneNumber.trim();
     }
+    console.log(user.phoneNumber + "  is the phone-number");
+
+    console.log("[DEBUG] user object in addUserImportantDetails:", user);
+    console.log("[DEBUG] typeof user.save:", typeof user?.save);
 
     // Save user with updated fields
     await user.save();
@@ -340,6 +345,32 @@ class UserService {
       phoneNumber: updated.phoneNumber || "Not provided",
       userName: updated.userName || "Not provided",
     };
+  }
+  // Service method to handle the report 
+  async reportUser(userId: string | undefined, reportInfo: Report) {
+
+    if (!userId) {
+      // If there is no currnet partner id throw new error
+      throw new ApiError(400, "userId is required to report");
+
+    }
+
+    // Check the availability of the partner
+    if (!reportInfo.reportedUserId || reportInfo.reportedUserId === "") {
+      throw new ApiError(400, "partnerId is required to report");
+    }
+
+    if (!["like", "dislike"].includes(reportInfo.type)) {
+      throw new ApiError(400, "Invalid report type. Must be 'like' or 'dislike'.");
+    }
+
+    await UserReport.create({
+      reportedBy: userId,
+      reportedUser: reportInfo.reportedUserId,
+      type: reportInfo.type,
+    });
+
+    return;
   }
 
 }

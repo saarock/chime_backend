@@ -5,7 +5,7 @@ import { ApiError, asyncHandler, token } from "../utils/index.js";
 export const verifyJWTRefreshToken = asyncHandler(
   async (req: Request, _: Response, next: NextFunction) => {
     // Get the refreshToken
-    const refreshToken = req.cookies.refreshToken;
+    const refreshToken = req.cookies.refreshToken;   
 
     // Check the token is available or not
     if (
