@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
-import { userService } from "../../../src/services/databaseService/index.js";
+import { userService } from "../../../src/services/databaseService/api/index.js";
 import verifyGoogleToken from "../../../src/utils/verifyGoogleToken.js";
 import User from "../../../src/models/User.model.js";
 import RedisMock from "ioredis-mock";
@@ -185,7 +185,7 @@ describe("UserService - loginWithGoogle", () => {
   });
 
   it("should logout user and delete the refresh token from the database", async () => {
-    const user = {
+    const mockUser = {
       _id: "123",
       email: "test@example.com",
       refreshToken: "fake-refresh-token",
@@ -193,11 +193,16 @@ describe("UserService - loginWithGoogle", () => {
       save: vi.fn().mockResolvedValue(true),
     };
 
-    await (User.findById as any).mockResolvedValue(user);
+    (User.findById as any) = vi.fn().mockImplementation(() => ({
+      select: vi.fn().mockResolvedValue(mockUser),
+    }));
+
     await userService.logoutUser("123");
-    expect(user.set).toHaveBeenCalledWith("refreshToken", undefined, {
+
+    expect(mockUser.set).toHaveBeenCalledWith("refreshToken", undefined, {
       strict: false,
     });
-    expect(user.save).toHaveBeenCalled();
+    expect(mockUser.save).toHaveBeenCalled();
   });
+
 });

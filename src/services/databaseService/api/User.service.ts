@@ -218,7 +218,7 @@ class UserService {
 
       throw new ApiError(404, "userId doesnot found");
     }
-    const user = await User.findById(userId).select('refreshToken');
+    const user = await User.findById(userId).select('refreshToken _id');
 
     if (!user) {
       console.error("No user found with given user id");
@@ -229,6 +229,8 @@ class UserService {
     if (user.refreshToken) {
       user.set("refreshToken", undefined, { strict: false });
       await user.save({ validateBeforeSave: false });
+      // Delete the redis cache data 
+      await userHelper.deleteTheRedisCacheData(user._id.toString());
       return;
     } else {
       throw new ApiError(400, "User is already logged out.");

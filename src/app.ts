@@ -47,6 +47,7 @@ app.use(hpp());
 
 // Enable gzip compression for responses (performance & security)
 app.use(compression());
+
 // ##################### Security end ################### //
 
 
@@ -93,5 +94,5 @@ import compression from "compression";
 app.use("/admin/", dashBoardRoute);
 
 
-
+// Export the app 
 export default app;

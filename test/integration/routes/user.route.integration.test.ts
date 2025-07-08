@@ -20,6 +20,7 @@ vi.mock("../../../src/helpers/user.helper.js", () => {
         profilePicture: "profile.jpg",
       }),
       verifyRefreshToken: vi.fn().mockResolvedValue({ userId }),
+      deleteTheRedisCacheData: vi.fn().mockResolvedValue(userId)
     },
   };
 });
@@ -51,6 +52,7 @@ vi.mock("../../../src/middlewares/refreshTokenVerify.middleware.js", () => ({
     next();
   }),
 }));
+
 
 const userMock = {
   _id: "some-id",
@@ -320,9 +322,14 @@ describe("POST /logout-user", () => {
     const selectMock = vi.fn().mockResolvedValue(user);
     User.findById = vi.fn().mockReturnValue({ select: selectMock } as any);
 
+
     const response = await request(app)
       .post("/api/v1/users/logout-user")
       .set("Cookie", [`accessToken=${token}`]);
+
+    console.log("this is the logout response body");
+    console.log(response.body);
+
 
     expect(response.body.statusCode).toBe(200);
   });
