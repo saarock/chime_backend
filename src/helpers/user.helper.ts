@@ -66,6 +66,13 @@ class UserHelper {
     }
     return null;
   };
+
+
+  // Delete the redis cache data
+  public async deleteTheRedisCacheData(userId: string): Promise<void> {
+    await client.del(`user:${userId}`);
+    return;
+  }
 }
 
 const userHelper = new UserHelper();

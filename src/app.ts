@@ -6,12 +6,51 @@ import cookieParser from "cookie-parser";
 import express from "express";
 import cors from "cors";
 import expressEjsLayouts from "express-ejs-layouts";
+import helmet from "helmet";
+import mongoSanitize from "express-mongo-sanitize";
+
 
 // config the dotenv
 dotenv.config();
 
 
 const app = express();
+
+// ##################### Security start ################### //
+app.use(helmet());
+
+// app configuration
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGIN || "http://localhost:5173",
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true,
+  }),
+);
+
+// Limit repeated requests to public APIs and/or endpoints such as login
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
+  message: "Too many requests from this IP, please try again later.",
+});
+app.use(limiter);
+
+// To accept the JSON From the server
+app.use(express.json({ limit: "10mb" }));
+
+// Data sanitization against NoSQL query injection
+
+
+// Prevent HTTP Parameter Pollution
+app.use(hpp());
+
+// Enable gzip compression for responses (performance & security)
+app.use(compression());
+
+// ##################### Security end ################### //
+
+
 
 // Equivalent to __filename and __dirname in ESM
 const __filename = fileURLToPath(import.meta.url);
@@ -26,18 +65,6 @@ app.set("views", path.join(__dirname, "views"));
 app.use(expressEjsLayouts);
 app.set("layout", "layouts/master");
 
-
-
-// app configuration
-app.use(
-  cors({
-    origin: process.env.CORS_ORIGIN || "http://localhost:5173",
-    credentials: true,
-  }),
-);
-
-// To accept the JSON From the server
-app.use(express.json());
 // Cookie parser
 app.use(cookieParser());
 // URL configuration
@@ -61,8 +88,11 @@ app.use("/api/v1/users", feedBackRouter);
 
 // Admin routers
 import { dashBoardRoute } from "./routes/admin/index.js";
+import rateLimit from "express-rate-limit";
+import hpp from "hpp";
+import compression from "compression";
 app.use("/admin/", dashBoardRoute);
 
 
-
+// Export the app 
 export default app;
