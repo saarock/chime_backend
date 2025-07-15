@@ -1,6 +1,6 @@
 import { createClient } from "redis";
 
-const REDIS_URL = process.env.REDIS_URL || "rediss://default:<your-token>@clear-bug-58136.upstash.io:6379";
+const REDIS_URL = process.env.REDIS_URL || "rediss://default:AeMYAAIjcDEzZDNkMTlhZmE0MDQ0MTYwYjJmNmEzMDQzMGM1YTgzZHAxMA@clear-bug-58136.upstash.io:6379";
 
 console.log(process.env.REDIS_URL);
 
