@@ -259,7 +259,7 @@ class UserService {
    */
   async addUserImportantDetails(
     userImportantDetails: Partial<UserImpDetails> & { userId: string | undefined },
-  ): Promise<UserImpDetails | null> {
+  ): Promise<userTypes | null> {
     if (!userImportantDetails) {
       throw new ApiError(400, "Request body is required");
     }
@@ -338,15 +338,7 @@ class UserService {
     await userHelper.cacheTheUserDataById(userId, JSON.stringify(updated));
 
     // Return updated important details (fallbacks if missing)
-    return {
-      userId,
-      age: Number(updated.age),
-      country: updated.country || "Not specified",
-      gender: updated.gender || "Not specified",
-      relationshipStatus: updated.relationShipStatus || "Not specified",
-      phoneNumber: updated.phoneNumber || "Not provided",
-      userName: updated.userName || "Not provided",
-    };
+    return updated;
   }
   // Service method to handle the report 
   async reportUser(userId: string | undefined, reportInfo: Report) {
