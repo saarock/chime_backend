@@ -63,7 +63,7 @@ class UserService {
         // throw error if the user is blocked or not active
         throw new ApiError(
           403,
-          "You are blocked because of irrelevant activities pleased contact us.",
+          "You are blocked because of irrelevant activities pleased contact us."
         );
       }
 
@@ -71,7 +71,7 @@ class UserService {
       const { accessToken, refreshToken } =
         await this.userHelper.generateAccessAndRefreshTokensAndCacheTheUserDataInRedis(
           alreadySavedUser._id,
-          alreadySavedUser,
+          alreadySavedUser
         );
 
       // If all the process completed then simply retrun the tokens with userData
@@ -99,7 +99,7 @@ class UserService {
     const { accessToken, refreshToken } =
       await this.userHelper.generateAccessAndRefreshTokensAndCacheTheUserDataInRedis(
         justCreatedUser._id,
-        userWithoutSensitiveData,
+        userWithoutSensitiveData
       );
 
     // Return user data and tokens
@@ -136,7 +136,7 @@ class UserService {
         // chache the data again;
         this.userHelper.cacheTheUserDataById(
           userData?._id.toString(),
-          JSON.stringify(userData),
+          JSON.stringify(userData)
         );
       } else {
         throw new ApiError(400, "UserData not found");
@@ -144,16 +144,16 @@ class UserService {
     }
 
     // If user not found then we declared an-authorized
-    if (!userData) throw new ApiError(401, "You are not allowed to visit this page.");
+    if (!userData)
+      throw new ApiError(401, "You are not allowed to visit this page.");
 
     // return the data to the controller
     return userData;
   }
 
-
   async generateAnotherRefreshTokenAndAccessTokenAndChangeTheDatabaseRefreshToken(
     userId: string | undefined,
-    refreshTokenFromClient: string,
+    refreshTokenFromClient: string
   ): Promise<{
     refreshToken: string;
     accessToken: string;
@@ -193,7 +193,7 @@ class UserService {
       const { refreshToken, accessToken } =
         await this.userHelper.generateAccessAndRefreshTokensAndCacheTheUserDataInRedis(
           userDataWithoutSensativeData?._id,
-          userDataWithoutSensativeData,
+          userDataWithoutSensativeData
         );
       return {
         refreshToken,
@@ -203,7 +203,7 @@ class UserService {
       throw new ApiError(
         401,
         "You do not have permission for the requested action",
-        ["while refreshing the token"],
+        ["while refreshing the token"]
       );
     }
   }
@@ -218,7 +218,7 @@ class UserService {
 
       throw new ApiError(404, "userId doesnot found");
     }
-    const user = await User.findById(userId).select('refreshToken _id');
+    const user = await User.findById(userId).select("refreshToken _id");
 
     if (!user) {
       console.error("No user found with given user id");
@@ -229,15 +229,13 @@ class UserService {
     if (user.refreshToken) {
       user.set("refreshToken", undefined, { strict: false });
       await user.save({ validateBeforeSave: false });
-      // Delete the redis cache data 
+      // Delete the redis cache data
       await userHelper.deleteTheRedisCacheData(user._id.toString());
       return;
     } else {
       throw new ApiError(400, "User is already logged out.");
     }
   }
-
-
 
   /**
    * Updates user profile details with only provided fields.
@@ -258,7 +256,9 @@ class UserService {
    * @throws ApiError if user not found or username conflict.
    */
   async addUserImportantDetails(
-    userImportantDetails: Partial<UserImpDetails> & { userId: string | undefined },
+    userImportantDetails: Partial<UserImpDetails> & {
+      userId: string | undefined;
+    }
   ): Promise<userTypes | null> {
     if (!userImportantDetails) {
       throw new ApiError(400, "Request body is required");
@@ -272,6 +272,7 @@ class UserService {
       phoneNumber,
       relationshipStatus,
       userName,
+      password,
     } = userImportantDetails;
 
     if (!userId) {
@@ -315,12 +316,19 @@ class UserService {
     }
 
     if (phoneNumber && phoneNumber.trim() !== "") {
+      const existingUserPhoneNumber = await User.findOne({
+        phoneNumber: phoneNumber.trim(),
+      });
+      if (existingUserPhoneNumber) {
+        throw new ApiError(400, "PhoneNumber already exists");
+      }
+
       user.phoneNumber = phoneNumber.trim();
     }
-    console.log(user.phoneNumber + "  is the phone-number");
 
-    console.log("[DEBUG] user object in addUserImportantDetails:", user);
-    console.log("[DEBUG] typeof user.save:", typeof user?.save);
+    if (password && password.trim() !== "") {
+      user.password = password.trim();
+    }
 
     // Save user with updated fields
     await user.save();
@@ -340,13 +348,11 @@ class UserService {
     // Return updated important details (fallbacks if missing)
     return updated;
   }
-  // Service method to handle the report 
+  // Service method to handle the report
   async reportUser(userId: string | undefined, reportInfo: Report) {
-
     if (!userId) {
       // If there is no currnet partner id throw new error
       throw new ApiError(400, "userId is required to report");
-
     }
 
     // Check the availability of the partner
@@ -355,7 +361,10 @@ class UserService {
     }
 
     if (!["like", "dislike"].includes(reportInfo.type)) {
-      throw new ApiError(400, "Invalid report type. Must be 'like' or 'dislike'.");
+      throw new ApiError(
+        400,
+        "Invalid report type. Must be 'like' or 'dislike'."
+      );
     }
 
     await UserReport.create({
@@ -366,7 +375,6 @@ class UserService {
 
     return;
   }
-
 }
 
 // Create an instance of the UserService

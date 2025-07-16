@@ -73,7 +73,7 @@ const userSchema = new Schema(
   },
   {
     timestamps: true,
-  },
+  }
 );
 
 // aggregate Query setup
@@ -84,12 +84,16 @@ userSchema.plugin(mongooseAggregatePaginate);
 // hash the password
 userSchema.pre("save", async function (next) {
   if (
-    !this.password ||
-    !this.isModified("password") ||
-    this.password.trim() !== ""
-  )
+    !this.password || // password doesn't exist
+    !this.isModified("password") || // password not modified
+    this.password.trim() === "" // password is blank
+  ) {
     return next();
-  this.password = await bcrypt.hash(this.password, 20);
+  }
+
+  this.password = await bcrypt.hash(this.password, 12);
+  console.log("Password is hashed!");
+  
   next();
 });
 
@@ -120,7 +124,7 @@ userSchema.methods.generateAccessToken = async function () {
     secret,
     {
       expiresIn: expiry,
-    },
+    }
   );
 };
 
@@ -142,7 +146,7 @@ userSchema.methods.generateRefreshToken = async function () {
     secret,
     {
       expiresIn: expiry,
-    },
+    }
   );
 };
 

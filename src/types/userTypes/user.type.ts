@@ -79,7 +79,8 @@ export interface UserImpDetails {
   userId?: string;             // Associated user ID
   relationshipStatus?: string; // Optional relationship status
   phoneNumber?: string;       // Optional phone number
-  userName: string;
+  userName: string;  // UserName 
+  password: string;
 }
 
 /**
