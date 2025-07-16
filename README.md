@@ -1,6 +1,4 @@
-# back
-
-To install dependencies:
+# To install dependencies:
 
 ```bash
 bun install
@@ -14,6 +12,7 @@ bun run dev
 ```
 
 This project was created using `bun init` in bun v1.1.34. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.
+
 # Chime Webapp backned [A Real-Time Application]
 
 > ⚠️ **Warning:**  
