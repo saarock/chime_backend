@@ -121,8 +121,6 @@ export default class VideoCallUserQueue {
         break;
     }
 
-    console.log("user details saved completed");
-    
     await pipeline.exec();
   }
 

@@ -1,8 +1,8 @@
 import { createClient } from "redis";
+import { getEnv } from "../utils/index.js";
 
-const REDIS_URL = process.env.REDIS_URL || "rediss://default:AeMYAAIjcDEzZDNkMTlhZmE0MDQ0MTYwYjJmNmEzMDQzMGM1YTgzZHAxMA@clear-bug-58136.upstash.io:6379";
 
-console.log(process.env.REDIS_URL);
+const REDIS_URL = getEnv("REDIS_URL", "redis://localhost:6379");
 
 
 // Create Redis clients
@@ -20,7 +20,9 @@ client.on("connect", () => console.log("✅ Redis client connected"));
 videoClient.on("connect", () => console.log("✅ Video Redis client connected"));
 
 client.on("reconnecting", () => console.log("♻️ Redis client reconnecting..."));
-videoClient.on("reconnecting", () => console.log("♻️ Video Redis client reconnecting..."));
+videoClient.on("reconnecting", () =>
+  console.log("♻️ Video Redis client reconnecting...")
+);
 
 // Connect both clients concurrently
 const connectRedis = async () => {

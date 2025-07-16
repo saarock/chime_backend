@@ -1,7 +1,14 @@
+import dotenv from "dotenv";
+
+// config the dotenv
+dotenv.config();
+
+
 // Import all the necessary dependencies
 import app from "./app.js";
 import { createServer } from "http";
 import { initSockets } from "./socket/index.js";
+
 
 // PORT
 const port = process.env.PORT || 8000;

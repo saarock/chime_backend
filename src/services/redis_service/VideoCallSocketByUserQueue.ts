@@ -1,6 +1,10 @@
 import type { DefaultEventsMap, Socket } from "socket.io";
-import { client } from "../../configs/redis.js";
+import { videoClient } from "../../configs/redis.js";
 
+
+/**
+ * This class is responsible to handle the currently online users
+ */
 class VideoCallSocketByUserQueue {
   private static redisKey = "videoSocket:users"; // Redis SET of online user IDs
 
@@ -9,23 +13,31 @@ class VideoCallSocketByUserQueue {
    */
   public async set(
     userId: string,
-    socket: Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap>,
+    socket: Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap>
   ): Promise<void> {
-    console.log("setting...............");
+    // Check and delete invalid key if necessary
+    const keyType = await videoClient.type(VideoCallSocketByUserQueue.redisKey);
+    if (keyType !== "set" && keyType !== "none") {
+      console.warn(
+        `❗ Redis key "${VideoCallSocketByUserQueue.redisKey}" is type "${keyType}", deleting it...`
+      );
+      await videoClient.del(VideoCallSocketByUserQueue.redisKey);
+    }
 
-    await Promise.all([
-      client.set(`videoSocket:${userId}`, socket.id),
-      client.sAdd(VideoCallSocketByUserQueue.redisKey, userId),
-    ]);
-    // console.log("set");
-    console.log(socket.id + ": set");
+    // Delete the old socket
+    await this.delete(userId);
+    const pipline = videoClient.multi();
+    pipline.set(`videoSocket:${userId}`, socket.id, { EX: 3600 });
+    pipline.sAdd(VideoCallSocketByUserQueue.redisKey, userId);
+    pipline.expire(VideoCallSocketByUserQueue.redisKey, 3600);
+    await pipline.exec();
   }
 
   /**
    * Retrieve the socket ID for a user.
    */
   public async get(userId: string): Promise<string | null> {
-    return await client.get(`videoSocket:${userId}`);
+    return await videoClient.get(`videoSocket:${userId}`);
   }
 
   /**
@@ -33,7 +45,7 @@ class VideoCallSocketByUserQueue {
    */
   public async update(
     userId: string,
-    socket: Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap>,
+    socket: Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap>
   ): Promise<void> {
     await this.set(userId, socket);
   }
@@ -42,26 +54,24 @@ class VideoCallSocketByUserQueue {
    * Remove socket ID and user from online set.
    */
   public async delete(userId: string): Promise<void> {
-    await Promise.all([
-      client.del(`videoSocket:${userId}`),
-      client.sRem(VideoCallSocketByUserQueue.redisKey, userId),
-    ]);
+    const pipline = videoClient.multi();
+    pipline.del(`videoSocket:${userId}`);
+    pipline.sRem(VideoCallSocketByUserQueue.redisKey, userId);
+    await pipline.exec();
   }
 
   /**
    * Get total number of online users.
    */
   public async count(): Promise<number> {
-    console.log(await client.sCard(VideoCallSocketByUserQueue.redisKey));
-
-    return await client.sCard(VideoCallSocketByUserQueue.redisKey);
+    return await videoClient.sCard(VideoCallSocketByUserQueue.redisKey);
   }
 
   /**
    * Get all user IDs who are currently online.
    */
   public async getAllOnlineUserIds(): Promise<string[]> {
-    return await client.sMembers(VideoCallSocketByUserQueue.redisKey);
+    return await videoClient.sMembers(VideoCallSocketByUserQueue.redisKey);
   }
 }
 

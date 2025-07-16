@@ -5,6 +5,7 @@ import ApiResponse from "./ApiResponse.js";
 import verifyGoogleToken from "./verifyGoogleToken.js";
 import token from "./token.js";
 import { fisherShuffle } from "./fisherShuffle.js";
+import getEnv from "./lazyEnv.js";
 
 // export
 export {
@@ -14,4 +15,5 @@ export {
   verifyGoogleToken,
   token,
   fisherShuffle,
+  getEnv,
 };

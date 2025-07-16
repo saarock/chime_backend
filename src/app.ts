@@ -1,5 +1,4 @@
 // Import all the necessary dependencies here
-import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 import cookieParser from "cookie-parser";
@@ -7,11 +6,8 @@ import express from "express";
 import cors from "cors";
 import expressEjsLayouts from "express-ejs-layouts";
 import helmet from "helmet";
-import mongoSanitize from "express-mongo-sanitize";
 
 
-// config the dotenv
-dotenv.config();
 
 
 const app = express();
