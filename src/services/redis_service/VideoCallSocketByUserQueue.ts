@@ -73,6 +73,28 @@ class VideoCallSocketByUserQueue {
   public async getAllOnlineUserIds(): Promise<string[]> {
     return await videoClient.sMembers(VideoCallSocketByUserQueue.redisKey);
   }
+
+  /**
+ * Get a map of all online users and their socket IDs.
+ */
+public async getAllOnlineUsersWithSockets(): Promise<{ userId: string; socketId: string | null }[]> {
+  const userIds = await this.getAllOnlineUserIds();
+  if (!userIds.length) return [];
+
+  const pipeline = videoClient.multi();
+  userIds.forEach((userId) => {
+    pipeline.get(`videoSocket:${userId}`);
+  });
+
+  const responses = await pipeline.exec(); // (error, result) tuples
+
+  return userIds.map((userId, index) => {
+    const response = responses?.[index];
+    const socketId = Array.isArray(response) && response.length === 2 ? response[1] as string | null : null;
+    return { userId, socketId };
+  });
+}
+
 }
 
 export default VideoCallSocketByUserQueue;

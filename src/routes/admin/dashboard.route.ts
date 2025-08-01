@@ -8,8 +8,8 @@ const dashBoardRoute = Router();
 
 
 dashBoardRoute.get("/dashboard", verifyAdmin, forceLogoutIfAnyUserDetailChange, fetchUsers);
-dashBoardRoute.post("/:userId/make-admin", verifyAdmin, forceLogoutIfAnyUserDetailChange, makeAdmin)
-dashBoardRoute.post("/:userId/block", verifyAdmin, forceLogoutIfAnyUserDetailChange, blockAndUnBlockUser)
+dashBoardRoute.post("/:userId/make-admin", verifyAdmin, forceLogoutIfAnyUserDetailChange, makeAdmin);
+dashBoardRoute.post("/:userId/block", verifyAdmin, forceLogoutIfAnyUserDetailChange, blockAndUnBlockUser);
 
 
 

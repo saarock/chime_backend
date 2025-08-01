@@ -52,7 +52,7 @@ class VideoSocket {
   private async findRandomUser(
     socket: Socket<DefaultEventsMap, DefaultEventsMap, DefaultEventsMap>,
     userId: string,
-    userDetails: UserDetails,
+    userDetails: UserDetails
   ) {
     const isUserBusy = await this.activeCalls.getPartner(userId);
 
@@ -153,7 +153,7 @@ class VideoSocket {
 
     const userId = socket.data.user._id;
 
-    // At the start of handleConnection: Detect the duplicate connection and disconnect the old one 
+    // At the start of handleConnection: Detect the duplicate connection and disconnect the old one
     await this.disconnectPreviousIfExists(userId);
 
     // Cache this socket in Redis for lookups
@@ -186,7 +186,7 @@ class VideoSocket {
     // Broadcast online user count on request
     socket.on("onlineUsersCount", async () => {
       console.log("Online user count is ");
-      
+
       const count = await this.getOnlineUserCountSomehow();
       socket.emit("onlineUsersCount", { count });
       socket.broadcast.emit("onlineUsersCount", { count });
@@ -296,10 +296,12 @@ class VideoSocket {
     // Handle user-initiated call end
     socket.on("end-call", async ({ partnerId }) => {
       try {
+        console.log("Call ended");
+
         if (partnerId) {
           const userCallLog = await this.activeCalls.deleteCall(
             partnerId,
-            userId,
+            userId
           );
           await sendMessage("video-end", userCallLog);
           const partnerSocketId = await this.socketsByUser.get(partnerId);
@@ -337,14 +339,14 @@ class VideoSocket {
 
             const userCallLog = await this.activeCalls.deleteCall(
               partnerId,
-              userId,
+              userId
             );
             await sendMessage("video-end", userCallLog);
 
             const partnerSocketId = await this.socketsByUser.get(partnerId);
             if (!partnerSocketId) {
               throw new Error(
-                "No partner Socket id found in go:and:tell:callee",
+                "No partner Socket id found in go:and:tell:callee"
               );
             }
             const partnerSocket = this._io.sockets.get(partnerSocketId);
@@ -367,7 +369,7 @@ class VideoSocket {
           };
           await sendMessage("error-logs", errorLogs);
         }
-      },
+      }
     );
 
     // Clean up on socket disconnect
@@ -403,7 +405,7 @@ class VideoSocket {
           partnerSocket?.emit("user:call-ended", { isEnder: false });
           const userCallLog = await this.activeCalls.deleteCall(
             partnerId,
-            userId,
+            userId
           );
           await sendMessage("video-end", userCallLog);
         }
@@ -429,6 +431,59 @@ class VideoSocket {
         await sendMessage("error-logs", errorLogs);
       }
     });
+
+    // ########################## Test only Chats #######################################
+    socket.on("chat-message", async ({ message, to }) => {
+      try {
+        const fromUserId = userId;
+
+        // Determine the target user ID to send the message to:
+        // Use the 'to' parameter if provided, else fallback to current active call partner
+        let targetUserId = to;
+        if (!targetUserId) {
+          targetUserId = await this.activeCalls.getPartner(fromUserId);
+        }
+
+        if (!targetUserId) {
+          socket.emit("chat-error", {
+            message: "No target user specified or active call partner found.",
+          });
+          return;
+        }
+
+        // Find target user's socket ID
+        const targetSocketId = await this.socketsByUser.get(targetUserId);
+        if (!targetSocketId) {
+          socket.emit("chat-error", {
+            message: "Target user is not connected.",
+          });
+          return;
+        }
+
+        const targetSocket = this._io.sockets.get(targetSocketId);
+        if (!targetSocket) {
+          socket.emit("chat-error", {
+            message: "Target user's socket not found.",
+          });
+          return;
+        }
+
+        console.log(message);
+        console.log(fromUserId);
+        
+        
+        // Forward the message to the target user
+        targetSocket.emit("receive-chat-message", {
+          fromUserId,
+          message,
+        });
+      } catch (error) {
+        socket.emit("chat-error", {
+          message:
+            error instanceof Error ? error.message : "Chat message error.",
+        });
+      }
+    });
   }
 
   /**
@@ -448,7 +503,7 @@ class VideoSocket {
   public async matchFound(
     callerId: string,
     calleeId: string,
-    isCaller: boolean,
+    isCaller: boolean
   ) {
     try {
       const callerSocketId = await this.socketsByUser.get(callerId);
