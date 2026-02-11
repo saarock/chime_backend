@@ -55,6 +55,9 @@ const __dirname = path.dirname(__filename);
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 
+// Proxy
+app.set('trust proxy', 1);
+
 // Enables layout
 app.use(expressEjsLayouts);
 app.set("layout", "layouts/master");
