@@ -470,8 +470,8 @@ class VideoSocket {
 
         console.log(message);
         console.log(fromUserId);
-        
-        
+
+
         // Forward the message to the target user
         targetSocket.emit("receive-chat-message", {
           fromUserId,
