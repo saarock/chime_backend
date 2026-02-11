@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node dist/index.js",
     "dev": "nodemon dist/index.js",
-    "build": "tsc --watch",
+    "build": "tsc",
     "test": "vitest"
   },
   "devDependencies": {
