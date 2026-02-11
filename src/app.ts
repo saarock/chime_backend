@@ -21,7 +21,8 @@ app.use(
     credentials: true,
   }),
 );
-
+// Proxy
+app.set('trust proxy', 1);
 // Limit repeated requests to public APIs and/or endpoints such as login
 const limiter = rateLimit({
   windowMs: 15 * 60 * 10000, // 15 minutes
@@ -29,6 +30,8 @@ const limiter = rateLimit({
   message: "Too many requests from this IP, please try again later.",
 });
 app.use(limiter);
+
+
 
 // To accept the JSON From the server
 app.use(express.json({ limit: "10mb" }));
@@ -55,8 +58,7 @@ const __dirname = path.dirname(__filename);
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
 
-// Proxy
-app.set('trust proxy', 1);
+
 
 // Enables layout
 app.use(expressEjsLayouts);
