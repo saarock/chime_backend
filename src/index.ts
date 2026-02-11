@@ -1,8 +1,4 @@
-import dotenv from "dotenv";
-
-// config the dotenv
-dotenv.config();
-
+import "dotenv/config.js";
 
 // Import all the necessary dependencies
 import app from "./app.js";

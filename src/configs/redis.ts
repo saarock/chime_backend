@@ -1,9 +1,7 @@
 import { createClient } from "redis";
 import { getEnv } from "../utils/index.js";
 
-
 const REDIS_URL = getEnv("REDIS_URL", "redis://localhost:6379");
-
 
 // Create Redis clients
 const client = createClient({ url: REDIS_URL });
@@ -21,7 +19,7 @@ videoClient.on("connect", () => console.log("✅ Video Redis client connected"))
 
 client.on("reconnecting", () => console.log("♻️ Redis client reconnecting..."));
 videoClient.on("reconnecting", () =>
-  console.log("♻️ Video Redis client reconnecting...")
+  console.log("♻️ Video Redis client reconnecting..."),
 );
 
 // Connect both clients concurrently

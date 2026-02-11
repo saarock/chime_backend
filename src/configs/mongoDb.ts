@@ -4,7 +4,10 @@ import mongoose from "mongoose";
 
 // async function that make connection to the mongodb database
 const connectMonogoDbDataBase = async () => {
-  const mongogbURL = process.env.MONGO_DB_URL || "mongodb+srv://saarock:Aayush888999@cluster0.ubjye.mongodb.net/s_1";
+  const mongogbURL = process.env.MONGO_DB_URL;
+  if (!mongogbURL) {
+    throw new Error("MONGO_DB_URL is not defined");
+  }
   
   // connect to the database
   await mongoose

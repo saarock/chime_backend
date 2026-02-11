@@ -8,7 +8,7 @@ async function flushCallLogs() {
   await callLogService.saveCallLogs(callBuffer);
 }
 
-setTimeout(flushCallLogs, FLUSH_INTERVAL_MS);
+setInterval(flushCallLogs, FLUSH_INTERVAL_MS);
 
 export const handleEndCalls = async () => {
   createConsumer("video-end", "end-call-group", async (message) => {
