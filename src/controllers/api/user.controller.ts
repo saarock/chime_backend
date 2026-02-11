@@ -15,16 +15,15 @@ const cookieHelper = () => {
   const accessTokenOptions: CookieOptions = {
     httpOnly: true, // Prevent access from client-side JS
     secure: isProduction, // HTTPS only in production
-    sameSite: "lax", // CSRF protection
+    sameSite: isProduction ? "none" : "lax",
     // maxAge: 5 * 60 * 1000, // 5 minutes (short lifespan for access token)
-    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days [For testing purpose in the mobile flutter]
-
+    maxAge: 2 * 24 * 60 * 60 * 1000, // 2 days
   };
 
   const refreshTokenOptions: CookieOptions = {
     httpOnly: true,
     secure: isProduction,
-    sameSite: "lax",
+    sameSite: isProduction ? "none" : "lax",
     maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
   };
 
@@ -53,7 +52,13 @@ export const loginFromTheGoogle = asyncHandler(async (req, res, _) => {
     .status(200)
     .cookie("accessToken", accessToken, accessTokenOptions)
     .cookie("refreshToken", refreshToken, refreshTokenOptions)
-    .json(new ApiResponse(200, { userData, accessToken }, "Login from Google successful."));
+    .json(
+      new ApiResponse(
+        200,
+        { userData, accessToken },
+        "Login from Google successful.",
+      ),
+    );
 });
 
 /**
@@ -76,7 +81,7 @@ export const verifyUser = asyncHandler(async (req, res, _) => {
  */
 export const generateAnotherAccessAndRefreshToken = asyncHandler(
   async (req, res, _) => {
-    // Access the cookie to validate the database refresh token vs user sent token same or not 
+    // Access the cookie to validate the database refresh token vs user sent token same or not
     const refreshTokenByUser = req.cookies.refreshToken;
     const userId = req.userId;
 
@@ -143,7 +148,7 @@ export const addUserImportantData = asyncHandler(async (req, res) => {
 
 /**
  * This controller fuction is responsible for repor
- * 
+ *
  */
 export const likeDislike = asyncHandler(async (req, res) => {
   const userId = req.userId;
@@ -156,10 +161,13 @@ export const likeDislike = asyncHandler(async (req, res) => {
       : "Your report has been submitted. Our team will review it shortly.";
 
   // Respond to client
-  return res.status(200).json(
-    new ApiResponse(200, { message: actionMessage }, "Report processed successfully.")
-  );
-
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        { message: actionMessage },
+        "Report processed successfully.",
+      ),
+    );
 });
-
-

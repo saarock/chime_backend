@@ -11,7 +11,7 @@ async function flushCallLogs() {
 setInterval(flushCallLogs, FLUSH_INTERVAL_MS);
 
 export const handleEndCalls = async () => {
-  createConsumer("video-end", "end-call-group", async (message) => {
+  await createConsumer("video-end", "end-call-group", async (message) => {
     callBuffer.push(message);
     if (callBuffer.length >= LOGS_BATCH_SIZE) {
       await flushCallLogs();

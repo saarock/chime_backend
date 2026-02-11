@@ -5,15 +5,18 @@ import { ERRORS_BATCH_SIZE, FLUSH_INTERVAL_MS } from "../../constant.js";
 const errorBuffer: any[] = [];
 
 // Flush function
+let flushing = false;
+
 const flushErrors = async () => {
+  if (flushing) return;
   if (errorBuffer.length === 0) return;
+  flushing = true;
 
-  const batch = errorBuffer.splice(0, errorBuffer.length); // remove and get all
-
+  const batch = errorBuffer.splice(0, errorBuffer.length);
   try {
-    await errorService.saveErrorsInBulk(batch); // assume this is a bulk insert method
-  } catch (err) {
-    console.error("Failed to save error batch:", err);
+    await errorService.saveErrorsInBulk(batch);
+  } finally {
+    flushing = false;
   }
 };
 
@@ -21,13 +24,13 @@ const flushErrors = async () => {
 setInterval(flushErrors, FLUSH_INTERVAL_MS);
 
 export const handleErrors = async () => {
-  createConsumer("error-logs", "error-group", async (message) => {
+  await createConsumer("error-logs", "error-group", async (message) => {
     const { where, userId } = message;
 
     errorBuffer.push({ where, message: message.message, userId });
 
     if (errorBuffer.length >= ERRORS_BATCH_SIZE) {
-      await flushErrors(); // flush immediately if batch is full
+      flushErrors().catch(console.error);
     }
   });
 };

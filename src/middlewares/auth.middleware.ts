@@ -21,9 +21,6 @@ export const verifyJWT = asyncHandler(
     // Get the accessToken from the user request
     const token = req.cookies.accessToken;
 
-    console.log(token + " this is the access token");
-
-
     // Check that token is available or not
     if (!token) {
       // If access-token is not available then it means that token is expired or user deleteted manually that's why send the error with the
